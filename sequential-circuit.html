@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap">
 <style>
-/* Two tabs sharing one circuit: (1) build the table one row at a time, (2) run an input sequence. */
+/* Two tabs sharing one circuit, laid out left to right: circuit | table (or trace) | state diagram.
+   Tab 1: click a row of the table. Tab 2: run an input sequence one clock tick at a time. */
 :root{
   --bg:#EDF0F3; --panel:#FFFFFF; --ink:#16202B; --muted:#5C6978; --rule:#D5DBE2;
   --wire:#AEB8C4; --hot:#E2560B; --hot-soft:#FDE6D8; --focus:#1D5BD0; --focus-soft:#DFE8FB;
@@ -20,14 +21,14 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.4}
-.wrap{max-width:1300px;margin:0 auto;padding:12px 16px;display:grid;gap:10px}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:16px;line-height:1.4}
+.wrap{max-width:1500px;margin:0 auto;padding:12px 16px;display:grid;gap:10px}
 .panel{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 14px;min-width:0}
-.ptitle{font-size:.7rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.ptitle{font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
 
 /* header + tabs */
 .head{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center}
-h1{font-size:1.15rem;font-weight:800;margin:0}
+h1{font-size:1.2rem;font-weight:800;margin:0}
 .tabs{display:inline-flex;gap:4px;background:var(--bg);padding:3px;border-radius:9px}
 .tabs button{border:0;background:transparent;min-height:34px}
 .tabs button[aria-selected="true"]{background:var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.15);color:var(--ink)}
@@ -46,19 +47,19 @@ button:disabled{opacity:.4;cursor:not-allowed;background:var(--panel)}
 button.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 input[type=text]{font-family:var(--f-mono);font-size:1rem;letter-spacing:.12em;padding:6px 10px;min-height:36px;border:1px solid var(--rule);border-radius:7px;background:var(--bg);color:var(--ink);width:14ch;vertical-align:middle}
 .btns{display:flex;gap:6px;flex-wrap:wrap}
+.how{margin:8px 0 0;color:var(--muted)}
+.how b{color:var(--ink)}
 .say{margin-top:8px;padding:6px 10px;border-left:4px solid var(--focus);background:var(--focus-soft);border-radius:0 6px 6px 0}
 .say .m{font-family:var(--f-mono);font-weight:700}
-.say .hot{color:var(--hot)}
 
-/* layout */
-.main{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
-.right{display:grid;gap:10px;align-content:start;min-width:0}
+/* layout: one row, left to right; wraps on narrow screens */
+.main{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}
+.main > section{flex:0 0 auto}
+#fsmPanel{flex:1 1 340px;min-width:280px;max-width:460px}
 svg{display:block;width:100%;height:auto}
-@media (min-width:900px){
-  .main{grid-template-columns:auto minmax(0,1fr)}
-  #circuit svg{height:calc(100vh - 210px);min-height:420px;max-height:720px;width:auto;max-width:100%}
-  .run #circuit svg{height:calc(100vh - 335px)}   /* tab 2 also shows the trace strip */
-}
+#circuit svg{height:calc(100vh - 200px);min-height:480px;max-height:900px;width:auto;max-width:100%}
+.run #circuit svg{height:calc(100vh - 250px)}   /* tab 2's header is taller */
+@media (max-width:700px){ #circuit svg{height:auto;width:100%;min-height:0} .main > section{flex:1 1 100%} }
 
 /* circuit */
 .w{fill:none;stroke:var(--wire);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:stroke .2s}
@@ -73,61 +74,55 @@ svg{display:block;width:100%;height:auto}
 .ff text{fill:var(--ink)}
 .ff .bit{font-family:var(--f-mono);font-size:26px;font-weight:700}
 .ff .bit.one{fill:var(--hot)}
+.ff .nx{font-family:var(--f-mono);font-size:12px;fill:var(--muted)}
+.ff .nx.one{fill:var(--hot);font-weight:700}
 .clk{fill:none;stroke:var(--ink);stroke-width:1.6}
 .ctext{font-family:var(--f-ui);font-weight:700;font-style:italic;font-size:17px;fill:var(--ink)}
-.plabel{font-family:var(--f-mono);font-size:12px;fill:var(--muted)}
-.ol{text-decoration:overline}
-.badge circle{fill:var(--panel);stroke:var(--muted);stroke-width:1.4}
-.badge text{font-family:var(--f-mono);font-size:12px;font-weight:700;fill:var(--ink)}
-.badge.on circle{fill:var(--hot);stroke:var(--hot)}
-.badge.on text{fill:#fff}
-.ff .nx{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
-.ff .nx.one{fill:var(--hot);font-weight:700}
-label.chk{display:inline-flex;align-items:center;gap:6px;font-weight:600;cursor:pointer}
-button.show{background:var(--hot);color:#fff;border-color:var(--hot)}
+/* wire labels with their value, e.g. "S₁x = 0", written beside the wire */
+.vl{font-family:var(--f-mono);font-size:17px;fill:var(--muted)}
+.vl .v{font-weight:700;fill:var(--ink)}
+.vl.on .v{fill:var(--hot)}
+.vl .ol{text-decoration:overline}
+.ptitle .key{font-size:.95em;letter-spacing:0;text-transform:none;font-weight:600;margin-left:14px}
+.key i{display:inline-block;width:18px;height:0;border-top:3.5px solid var(--hot);vertical-align:middle;margin-right:4px}
+.key i.off{border-top:2px solid var(--wire);margin-left:10px}
+
+/* state diagram */
+.node circle{fill:var(--panel);stroke:var(--ink);stroke-width:1.8;transition:all .2s}
+.node text{font-family:var(--f-mono);font-size:19px;font-weight:700;fill:var(--ink)}
+.node.cur circle{fill:var(--focus);stroke:var(--focus)}
+.node.cur text{fill:var(--panel)}
+.arc path{fill:none;stroke:var(--muted);stroke-width:1.7}
+.arc text{font-family:var(--f-mono);font-size:16px;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:5px;stroke-linejoin:round}
+.arc.next path{stroke:var(--focus);stroke-width:3.4}
+.arc.next text{fill:var(--focus);font-weight:700}
+.mk{fill:var(--muted)} .mk-next{fill:var(--focus)}
+.runner{fill:var(--focus)}
+
+/* table (tab 1) */
+.tt{border-collapse:collapse;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:1.1rem}
+.tt th{font-family:var(--f-ui);font-weight:700;padding:5px 14px;border-bottom:2px solid var(--ink)}
+.tt td{padding:5px 14px;text-align:center;border-bottom:1px solid var(--rule)}
+.tt tbody tr{cursor:pointer}
+.tt tbody tr:hover td{background:var(--bg)}
+.tt .sep{border-left:2px solid var(--ink)}
+.tt tr.cur td{background:var(--focus-soft);color:var(--focus);font-weight:700}
+.tt td.one{color:var(--hot);font-weight:700}
 details.eqbox{margin-top:10px;border-top:1px solid var(--rule);padding-top:8px}
 details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .eqs{display:grid;gap:6px;margin-top:8px;font-family:var(--f-mono);font-size:.95rem}
 .eqs .plug{color:var(--muted)}
 .eqs .res{font-weight:700;padding:0 5px;border-radius:5px}
 .eqs .res.on{background:var(--hot);color:#fff}
-.how{margin:8px 0 0;color:var(--muted)}
-.how b{color:var(--ink)}
-.key{font-size:.82em;color:var(--muted);margin:6px 0 0}
-.key i{display:inline-block;width:18px;height:0;border-top:3.5px solid var(--hot);vertical-align:middle;margin-right:4px}
-.key i.off{border-top:2px solid var(--wire);margin-left:10px}
+.ol{text-decoration:overline}
 
-/* state diagram */
-.node circle{fill:var(--panel);stroke:var(--ink);stroke-width:1.8;transition:all .2s}
-.node text{font-family:var(--f-mono);font-size:17px;font-weight:700;fill:var(--ink)}
-.node.cur circle{fill:var(--focus);stroke:var(--focus)}
-.node.cur text{fill:var(--panel)}
-.arc path{fill:none;stroke:var(--muted);stroke-width:1.7}
-.arc text{font-family:var(--f-mono);font-size:13px;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:5px;stroke-linejoin:round}
-.arc.next path{stroke:var(--focus);stroke-width:3.4}
-.arc.next text{fill:var(--focus);font-weight:700}
-.arc.hide{display:none}
-.mk{fill:var(--muted)} .mk-next{fill:var(--focus)}
-.runner{fill:var(--focus)}
-
-/* table */
-.tt{border-collapse:collapse;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
-.tt th{font-family:var(--f-ui);font-weight:700;padding:3px 12px;border-bottom:2px solid var(--ink)}
-.tt td{padding:3px 12px;text-align:center;border-bottom:1px solid var(--rule)}
-.tt tbody tr{cursor:pointer}
-.tt tbody tr:hover td{background:var(--bg)}
-.tt .sep{border-left:2px solid var(--ink)}
-.tt tr.cur td{background:var(--focus-soft);color:var(--focus);font-weight:700}
-.tt td.one{color:var(--hot);font-weight:700}
-.tt td.blank{color:var(--rule)}
-
-/* trace strip */
-.tracewrap{overflow-x:auto}
-.trace{border-collapse:collapse;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
-.trace th{font-family:var(--f-ui);text-align:right;font-weight:600;color:var(--muted);padding:2px 12px 2px 0;white-space:nowrap;position:sticky;left:0;background:var(--panel)}
-.trace td{text-align:center;min-width:40px;padding:2px 6px;border-left:1px solid var(--rule)}
-.trace td.future{color:var(--muted)}
-.trace td.cur{background:var(--focus-soft);color:var(--focus);font-weight:700}
+/* trace (tab 2): one row per clock tick */
+.tracewrap{max-height:calc(100vh - 300px);min-height:200px;overflow-y:auto}
+.trace{border-collapse:collapse;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:1.05rem}
+.trace th{font-family:var(--f-ui);font-weight:700;padding:5px 14px;border-bottom:2px solid var(--ink);position:sticky;top:0;background:var(--panel)}
+.trace td{padding:4px 14px;text-align:center;border-bottom:1px solid var(--rule)}
+.trace tr.future td{color:var(--muted)}
+.trace tr.cur td{background:var(--focus-soft);color:var(--focus);font-weight:700}
 .trace td.y1{color:var(--hot);font-weight:700}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
@@ -138,30 +133,23 @@ details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
     <div class="head">
       <h1>Sequential Circuit Example</h1>
       <div class="tabs" role="tablist">
-        <button role="tab" id="tabA" aria-selected="true">1. Build the table</button>
+        <button role="tab" id="tabA" aria-selected="true">1. One row at a time</button>
         <button role="tab" id="tabB" aria-selected="false">2. Run a sequence</button>
       </div>
     </div>
 
     <!-- tab 1 controls -->
     <div id="ctlA">
-      <p class="how"><b>How to use:</b> pick one row of the table by setting S₁, S₀ and x below (or click a row). Follow the values through the circuit to find D₁, D₀ and y, then press <b>Show answer</b> to check. Each row you finish fills in the table, and its arrow appears in the state diagram.</p>
-      <div class="bar" style="margin-top:10px">
-        <span><span class="lab">S₁</span><span class="seg" id="segS1"></span></span>
-        <span><span class="lab">S₀</span><span class="seg" id="segS0"></span></span>
-        <span><span class="lab">x</span><span class="seg" id="segX"></span></span>
-        <label class="chk"><input type="checkbox" id="predict" checked> Predict first</label>
-        <span class="btns"><button id="bFill">Fill whole table</button><button id="bClear">Clear table</button></span>
-      </div>
+      <p class="how"><b>How to use:</b> click any row of the table to see it in the circuit and in the state diagram. (The ↑ and ↓ keys move between rows.)</p>
       <div class="say" id="sayA"></div>
     </div>
 
     <!-- tab 2 controls -->
     <div id="ctlB" hidden>
-      <p class="how"><b>How to use:</b> pick a start state and type a sequence of inputs x. Each <b>Clock tick</b> moves the machine one step: the flip-flops store D₁D₀ and that becomes the new state.</p>
+      <p class="how"><b>How to use:</b> pick a start state, type your own 0s and 1s for x (the box has an example), then press <b>Clock tick</b> to move one step at a time.</p>
       <div class="bar" style="margin-top:10px">
         <span><span class="lab">Start state</span><span class="seg" id="startSeg"></span></span>
-        <span><span class="lab">Input x</span><input type="text" id="seqIn" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Input sequence of 0s and 1s"></span>
+        <span><span class="lab">Input x (edit me)</span><input type="text" id="seqIn" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Input sequence of 0s and 1s"></span>
         <span class="btns">
           <button id="bBack">◀ Back</button>
           <button id="bTick" class="primary">Clock tick ▶</button>
@@ -172,18 +160,13 @@ details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
     </div>
   </div>
 
-  <div class="panel" id="tracePanel" hidden>
-    <div class="tracewrap"><table class="trace" id="trace"></table></div>
-  </div>
-
   <div class="main">
-    <section class="panel"><p class="ptitle">Circuit</p><div id="circuit"></div>
-      <p class="key">Circles show each wire's value. <i></i>wire = 1 <i class="off"></i>wire = 0</p></section>
-    <div class="right">
-      <section class="panel" id="tablePanel"><p class="ptitle">Table (click a row)</p><table class="tt" id="tt"></table>
-        <details class="eqbox" id="eqBox"><summary>Equations from the gates</summary><div class="eqs" id="eqs"></div></details></section>
-      <section class="panel"><p class="ptitle">State diagram (arcs labeled x / y)</p><div id="fsm"></div></section>
-    </div>
+    <section class="panel"><p class="ptitle">Circuit <span class="key"><i></i>1 <i class="off"></i>0</span></p><div id="circuit"></div></section>
+    <section class="panel" id="tablePanel"><p class="ptitle">Table: click a row</p><table class="tt" id="tt"></table>
+      <details class="eqbox" id="eqBox"><summary>Equations from the gates</summary><div class="eqs" id="eqs"></div></details></section>
+    <section class="panel" id="tracePanel" hidden><p class="ptitle">Trace: one row per clock tick</p>
+      <div class="tracewrap" id="traceWrap"><table class="trace" id="trace"></table></div></section>
+    <section class="panel" id="fsmPanel"><p class="ptitle">State diagram (arcs labeled x / y)</p><div id="fsm"></div></section>
   </div>
 </div>
 
@@ -212,10 +195,21 @@ details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
   const S=n=>`S<tspan baseline-shift="sub" font-size="9">${n}</tspan>`;
   const Dn=n=>`D<tspan baseline-shift="sub" font-size="9">${n}</tspan>`;
   const arrow=(sig,x,y)=>`<path class="arr" data-sig="${sig}" d="M${x+12},${y-7} L${x},${y} L${x+12},${y+7} Z"/>`;
+  // label beside a wire showing its value: [signal, x, y, anchor, label]
+  const VL=[
+    ['x', 8,115,'start','x'],
+    ['y', 392,51,'start','y'],
+    ['a1',250,171,'middle','S₁x'],
+    ['a2',213,257,'start','S₀x'],
+    ['a3',250,383,'middle','<tspan class="ol">S</tspan>₁x'],
+    ['D0',410,181,'middle','D₀'],
+    ['D1',395,341,'middle','D₁'],
+    ['S0',150,537,'middle','S₀'],
+    ['S1',150,627,'middle','S₁'],
+  ];
   $('circuit').innerHTML=`
   <svg viewBox="0 0 510 725" role="img" aria-label="Sequential circuit: four AND gates, two OR gates, two D flip-flops">
     ${W('x',[[30,125],[120,125]])}${W('x',[[38,125],[38,405],[120,405]])}${W('x',[[38,275],[120,275]])}${D('x',38,125)}${D('x',38,275)}
-    <text class="ctext" x="12" y="131">x</text>
     ${W('S0',[[195,550],[60,550],[60,35],[300,35]])}${W('S0',[[60,255],[120,255]])}${D('S0',60,255)}
     ${W('S1',[[195,640],[105,640],[105,55],[300,55]])}${W('S1',[[105,105],[120,105]])}${W('S1',[[105,425],[109,425]])}${D('S1',105,105)}${D('S1',105,425)}
     ${W('a1',[[165,115],[190,115],[190,180],[306,180]])}
@@ -234,36 +228,29 @@ details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
     <circle class="bubble" cx="114" cy="425" r="5"/>
     <g class="gate" data-sig="D0"><path d="${OR_P(300,170)}"/></g>
     <g class="gate" data-sig="D1"><path d="${OR_P(300,330)}"/></g>
-    <text class="ctext" x="393" y="51">y</text>
-    <text class="plabel" x="250" y="172" text-anchor="middle">${S(1)}x</text>
-    <text class="plabel" x="250" y="258" text-anchor="middle">${S(0)}x</text>
-    <text class="plabel" x="250" y="380" text-anchor="middle"><tspan class="ol">S</tspan><tspan baseline-shift="sub" font-size="9">1</tspan>x</text>
     <g class="ff" id="ff0"><rect x="195" y="525" width="115" height="70" rx="3"/>
       <text x="205" y="555" style="font-weight:700;font-style:italic">${S(0)}</text>
       <text x="282" y="555" style="font-weight:700;font-style:italic">${Dn(0)}</text>
-      <text class="bit" id="bit0" x="246" y="580" text-anchor="middle">0</text>
-      <text class="nx" id="nx0" x="296" y="587" text-anchor="end">next 0</text>
+      <text class="bit" id="bit0" x="232" y="582" text-anchor="middle">0</text>
+      <text class="nx" id="nx0" x="297" y="588" text-anchor="end">next 0</text>
       <path class="clk" d="M310,568 L300,575 L310,582"/></g>
     <g class="ff" id="ff1"><rect x="195" y="615" width="115" height="70" rx="3"/>
       <text x="205" y="645" style="font-weight:700;font-style:italic">${S(1)}</text>
       <text x="282" y="645" style="font-weight:700;font-style:italic">${Dn(1)}</text>
-      <text class="bit" id="bit1" x="246" y="670" text-anchor="middle">0</text>
-      <text class="nx" id="nx1" x="296" y="677" text-anchor="end">next 0</text>
+      <text class="bit" id="bit1" x="232" y="672" text-anchor="middle">0</text>
+      <text class="nx" id="nx1" x="297" y="678" text-anchor="end">next 0</text>
       <path class="clk" d="M310,658 L300,665 L310,672"/></g>
     ${arrow('D0',311,550)}${arrow('D1',311,640)}${arrow('S0',173,550)}${arrow('S1',173,640)}
-    ${[['x',38,200],['S0',60,480],['S1',105,500],['a1',282,180],['a2',185,265],['a3',282,360],['D0',470,400],['D1',440,500],['y',366,45]]
-      .map(([sig,x,y])=>`<g class="badge" data-sig="${sig}"><circle cx="${x}" cy="${y}" r="10"/><text x="${x}" y="${y+4}" text-anchor="middle">0</text></g>`).join('')}
+    ${VL.map(([sig,x,y,anc,lab])=>`<text class="vl" data-sig="${sig}" x="${x}" y="${y}" text-anchor="${anc}">${lab} = <tspan class="v">0</tspan></text>`).join('')}
   </svg>`;
   const csvg=document.querySelector('#circuit svg');
 
-  // hide = true: only the inputs (x, S1, S0) are shown; everything the gates compute is "?"
-  function drawCircuit(s,x,hide){
+  function drawCircuit(s,x){
     const g=evalSig(s,x);
-    if(hide) ['a1','a2','a3','D0','D1','y'].forEach(k=>{g[k]=null;});
     csvg.querySelectorAll('[data-sig]').forEach(el=>{
       const v=g[el.dataset.sig];
       if(el.classList.contains('arr')){ el.style.fill = v===1?'var(--hot)':'var(--ink)'; return; }
-      if(el.classList.contains('badge')){ el.classList.toggle('on',v===1); el.querySelector('text').textContent=v===null?'?':v; return; }
+      if(el.classList.contains('vl')){ el.classList.toggle('on',v===1); el.querySelector('.v').textContent=v===null?'?':v; return; }
       el.classList.toggle('on',v===1); el.classList.toggle('unk',v===null);
     });
     $('bit0').textContent=g.S0; $('bit1').textContent=g.S1;
@@ -271,80 +258,78 @@ details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
     [['nx0',g.D0],['nx1',g.D1]].forEach(([id,v])=>{$(id).textContent='next '+(v===null?'?':v); $(id).classList.toggle('one',v===1);});
   }
 
-  // ---- state diagram ----
-  const NODES={0:[60,80],2:[190,80],1:[320,80],3:[450,80]};
+  // ---- state diagram: 00 on the left, the 1-chain 00 -> 10 -> 01 -> 11 around the right ----
+  // arc key k = state*2 + x
+  const R=28;
+  const NODES={0:[110,185],2:[270,65],1:[330,185],3:[270,305]};
+  const unit=(dx,dy)=>{const L=Math.hypot(dx,dy); return [dx/L,dy/L];};
+  // curved edge from state a to state b; bend = sideways bulge (sign picks the side), lo = label distance past the bulge
+  function edge(a,b,bend,lo){
+    const [px,py]=NODES[a], [qx,qy]=NODES[b], [ux,uy]=unit(qx-px,qy-py), nx=-uy, ny=ux;
+    const cx=(px+qx)/2+nx*bend*2, cy=(py+qy)/2+ny*bend*2;          // control point (apex sits at half of this bulge)
+    const [sx,sy]=unit(cx-px,cy-py), [ex,ey]=unit(cx-qx,cy-qy);
+    const d=`M${px+sx*R},${py+sy*R} Q${cx},${cy} ${qx+ex*(R+2)},${qy+ey*(R+2)}`;
+    const ax=(px+qx)/2+nx*bend, ay=(py+qy)/2+ny*bend, sg=lo<0?-1:1;
+    return {d, lx:ax+nx*lo, ly:ay+ny*lo+5};
+  }
+  // self loop on state a, pointing in direction ang (degrees)
+  function loop(a,ang){
+    const [cx,cy]=NODES[a], t=ang*Math.PI/180, p=(o,r)=>[cx+r*Math.cos(t+o), cy+r*Math.sin(t+o)];
+    const [s1,s2]=p(-0.5,R), [c1x,c1y]=p(-0.7,R+90), [c2x,c2y]=p(0.7,R+90), [e1,e2]=p(0.5,R+2), [lx,ly]=p(0,R+60);
+    return {d:`M${s1},${s2} C${c1x},${c1y} ${c2x},${c2y} ${e1},${e2}`, lx, ly:ly+5};
+  }
   const ARCS=[
-    {k:0,d:'M48,53 C30,0 90,0 72,53',lx:60,ly:14,lab:'0/0'},
-    {k:1,d:'M90,80 L160,80',lx:125,ly:72,lab:'1/0'},
-    {k:4,d:'M180,108 Q125,170 70,108',lx:125,ly:152,lab:'0/0'},
-    {k:5,d:'M220,80 L290,80',lx:255,ly:72,lab:'1/0'},
-    {k:2,d:'M312,109 Q190,226 60,110',lx:190,ly:183,lab:'0/0'},
-    {k:3,d:'M350,80 L420,80',lx:385,ly:72,lab:'1/0'},
-    {k:6,d:'M442,109 Q255,282 50,108',lx:250,ly:213,lab:'0/1'},
-    {k:7,d:'M438,53 C420,0 480,0 462,53',lx:450,ly:14,lab:'1/1'},
+    {k:0,lab:'0/0',...loop(0,180)},
+    {k:1,lab:'1/0',...edge(0,2,-20,-14)},
+    {k:4,lab:'0/0',...edge(2,0,-20,-14)},
+    {k:5,lab:'1/0',...edge(2,1,-14,-16)},
+    {k:2,lab:'0/0',...edge(1,0,0,-14)},
+    {k:3,lab:'1/0',...edge(1,3,-14,-16)},
+    {k:6,lab:'0/1',...edge(3,0,0,14)},
+    {k:7,lab:'1/1',...loop(3,90)},
   ];
   $('fsm').innerHTML=`
-  <svg viewBox="0 0 520 235" role="img" aria-label="State diagram with states 00, 10, 01, 11">
+  <svg viewBox="0 0 390 410" role="img" aria-label="State diagram with states 00, 10, 01, 11">
     <defs>
       <marker id="mk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
       <marker id="mkN" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-next" d="M0,0 L10,5 L0,10 z"/></marker>
     </defs>
-    ${ARCS.map(a=>`<g class="arc" data-k="${a.k}"><path d="${a.d}" marker-end="url(#mk)"/><text x="${a.lx}" y="${a.ly}" text-anchor="middle">${a.lab}</text></g>`).join('')}
-    ${Object.entries(NODES).map(([s,[x,y]])=>`<g class="node" data-s="${s}"><circle cx="${x}" cy="${y}" r="28"/><text x="${x}" y="${y+6}" text-anchor="middle">${name(+s)}</text></g>`).join('')}
+    ${ARCS.map(a=>`<g class="arc" data-k="${a.k}"><path d="${a.d}" marker-end="url(#mk)"/><text x="${a.lx.toFixed(1)}" y="${a.ly.toFixed(1)}" text-anchor="middle">${a.lab}</text></g>`).join('')}
+    ${Object.entries(NODES).map(([s,[x,y]])=>`<g class="node" data-s="${s}"><circle cx="${x}" cy="${y}" r="${R}"/><text x="${x}" y="${y+6}" text-anchor="middle">${name(+s)}</text></g>`).join('')}
     <circle class="runner" id="runner" r="7" cx="-20" cy="-20"/>
   </svg>`;
   const fsvg=document.querySelector('#fsm svg');
 
-  // cur = highlighted state; hot = arc key to highlight (or -1); shown = which arcs are visible (null = all)
-  function drawFSM(cur,hot,shown){
+  // cur = highlighted state; hot = arc key to highlight (or -1)
+  function drawFSM(cur,hot){
     fsvg.querySelectorAll('.node').forEach(nd=>nd.classList.toggle('cur',+nd.dataset.s===cur));
-    fsvg.querySelectorAll('.arc').forEach(a=>{const k=+a.dataset.k, on=k===hot;
-      a.classList.toggle('next',on); a.classList.toggle('hide',shown!==null&&!shown.has(k));
+    fsvg.querySelectorAll('.arc').forEach(a=>{const on=+a.dataset.k===hot;
+      a.classList.toggle('next',on);
       a.querySelector('path').setAttribute('marker-end',on?'url(#mkN)':'url(#mk)');});
   }
 
-  // ---- tab 1: build the table ----
-  // row r = (S1 S0 x) read as a 3-bit number = s*2+x
-  const A={r:0,seen:new Set(),predict:true};
-  ['segS1','segS0','segX'].forEach(id=>{$(id).innerHTML=`<button data-v="0">0</button><button data-v="1">1</button>`;});
+  // ---- tab 1: the table ----
+  // row r = (S1 S0 x) read as a 3-bit number = s*2+x, which is also the arc key in the state diagram
+  const A={r:0};
   const bitsOf=r=>[(r>>2)&1,(r>>1)&1,r&1];
-  const pick=r=>{A.r=r; if(!A.predict) A.seen.add(r); renderA();};
-  [['segS1',2],['segS0',1],['segX',0]].forEach(([id,b])=>{
-    $(id).onclick=e=>{const bt=e.target.closest('button'); if(!bt) return;
-      pick(+bt.dataset.v ? (A.r|(1<<b)) : (A.r&~(1<<b)));};
-  });
+  const pick=r=>{A.r=r; renderA();};
   $('tt').innerHTML=`<thead><tr><th>S₁</th><th>S₀</th><th>x</th><th class="sep">D₁</th><th>D₀</th><th class="sep">y</th></tr></thead><tbody>`+
-    Array.from({length:8},(_,r)=>`<tr data-r="${r}">${'<td></td>'.repeat(6)}</tr>`).join('')+`</tbody>`;
+    Array.from({length:8},(_,r)=>{const [a,b,c]=bitsOf(r), ss=a*2+b, nn=next(ss,c);
+      return `<tr data-r="${r}">${[a,b,c,nn>>1,nn&1,yOf(ss)].map((v,i)=>`<td class="${i===3||i===5?'sep ':''}${v?'one':''}">${v}</td>`).join('')}</tr>`;}).join('')+`</tbody>`;
   const ttRows=[...$('tt').querySelectorAll('tbody tr')];
   $('tt').onclick=e=>{const tr=e.target.closest('tbody tr'); if(tr) pick(+tr.dataset.r);};
-  $('bFill').onclick=()=>{for(let r=0;r<8;r++) A.seen.add(r); renderA();};
-  $('bClear').onclick=()=>{A.seen=new Set(A.predict?[]:[A.r]); renderA();};
-  $('predict').onchange=e=>{A.predict=e.target.checked; if(!A.predict) A.seen.add(A.r); renderA();};
-  $('sayA').onclick=e=>{if(e.target.id==='bShow'){A.seen.add(A.r); renderA();}};
 
   function renderA(){
-    const [S1,S0,x]=bitsOf(A.r), s=S1*2+S0, n=next(s,x), y=yOf(s);
-    [['segS1',S1],['segS0',S0],['segX',x]].forEach(([id,v])=>$(id).querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.v===v)));
-    const known=A.seen.has(A.r);
-    drawCircuit(s,x,!known);
-    ttRows.forEach((tr,r)=>{
-      const [a,b,c]=bitsOf(r), ss=a*2+b, nn=next(ss,c), show=A.seen.has(r), q=r===A.r?'?':'·';
-      const vals=[a,b,c,show?nn>>1:q,show?nn&1:q,show?yOf(ss):q];
-      tr.innerHTML=vals.map((v,i)=>`<td class="${i===3||i===5?'sep ':''}${v===1?'one':''}${v==='·'?'blank':''}">${v}</td>`).join('');
-      tr.classList.toggle('cur',r===A.r);
-    });
-    const shown=new Set([...A.seen].map(r=>{const [a,b,c]=bitsOf(r); return (a*2+b)*2+c;}));
-    drawFSM(s,known?s*2+x:-1,shown);
-    const count=A.seen.size<8?` <span style="color:var(--muted)">(${A.seen.size} of 8 rows found)</span>`:'';
-    $('sayA').innerHTML = known
-      ? `In state ${M(name(s))} with input x = ${M(x)}: the next state is D₁D₀ = ${M(name(n))} and the output is y = ${M(y)}.`+count
-      : `State ${M(name(s))}, input x = ${M(x)}. Trace the circuit: what are D₁, D₀ and y? <button class="show" id="bShow">Show answer</button>`+count;
-    const g=evalSig(s,x), res=v=>known?`<span class="res ${v?'on':''}">${v}</span>`:'<span class="res">?</span>';
-    const plug=t=>known?`<span class="plug">= ${t}</span> = `:'= ';
+    const [S1,S0,x]=bitsOf(A.r), s=S1*2+S0, n=next(s,x), y=yOf(s), g=evalSig(s,x);
+    drawCircuit(s,x);
+    ttRows.forEach((tr,r)=>tr.classList.toggle('cur',r===A.r));
+    drawFSM(s,A.r);
+    $('sayA').innerHTML=`Row ${M(`${S1} ${S0} ${x}`)}: in state ${M(name(s))} with input x = ${M(x)}, the next state is D₁D₀ = ${M(name(n))} and the output is y = ${M(y)}.`;
+    const res=v=>`<span class="res ${v?'on':''}">${v}</span>`;
     $('eqs').innerHTML=`
-      <div>D₁ = S₀x + <span class="ol">S</span>₁x ${plug(`(${S0})(${x}) + (${1-S1})(${x})`)}${res(g.D1)}</div>
-      <div>D₀ = S₁x + S₀x ${plug(`(${S1})(${x}) + (${S0})(${x})`)}${res(g.D0)}</div>
-      <div>y&nbsp; = S₁S₀ ${plug(`(${S1})(${S0})`)}${res(g.y)}</div>`;
+      <div>D₁ = S₀x + <span class="ol">S</span>₁x <span class="plug">= (${S0})(${x}) + (${1-S1})(${x})</span> = ${res(g.D1)}</div>
+      <div>D₀ = S₁x + S₀x <span class="plug">= (${S1})(${x}) + (${S0})(${x})</span> = ${res(g.D0)}</div>
+      <div>y&nbsp; = S₁S₀ <span class="plug">= (${S1})(${S0})</span> = ${res(g.y)}</div>`;
   }
 
   // ---- tab 2: run a sequence ----
@@ -379,20 +364,19 @@ details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
     $('startSeg').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.s===B.start));
     $('bTick').disabled=t>=n; $('bBack').disabled=t===0;
     drawCircuit(s,x);
-    drawFSM(s,x===null?-1:s*2+x,null);
+    drawFSM(s,x===null?-1:s*2+x);
     $('sayB').innerHTML = !n ? 'Type some 0s and 1s for x to start.'
       : x===null ? `Done: after ${n} clock ticks the machine is in state ${M(name(s))}, with y = ${M(yOf(s))}. Press Reset to run it again.`
       : `Tick ${t}: in state ${M(name(s))}, y = ${M(yOf(s))}. The input is x = ${M(x)}, so the next <strong>Clock tick</strong> moves to ${M(name(next(s,x)))}.`;
 
-    const cells=f=>Array.from({length:n+1},(_,i)=>f(i)).join('');
-    const cls=i=>i<t?'':i===t?'cur':'future';
-    $('trace').innerHTML=`
-      <tr><th>tick</th>${cells(i=>`<td class="${cls(i)}">${i}</td>`)}</tr>
-      <tr><th>state S₁S₀</th>${cells(i=>`<td class="${cls(i)}">${i<=t?name(tr[i]):'·'}</td>`)}</tr>
-      <tr><th>input x</th>${cells(i=>`<td class="${cls(i)}">${i<n?B.bits[i]:'—'}</td>`)}</tr>
-      <tr><th>output y</th>${cells(i=>{const y=yOf(tr[i]);return `<td class="${cls(i)} ${i<=t&&y?'y1':''}">${i<=t?y:'·'}</td>`;})}</tr>`;
-    const c=$('trace').querySelector('td.cur');
-    if(c){const w=c.closest('.tracewrap'); w.scrollLeft=Math.max(0,c.offsetLeft-w.clientWidth/2);}
+    let rows='';
+    for(let i=0;i<=n;i++){
+      const cls=i<t?'':i===t?'cur':'future', y=yOf(tr[i]);
+      rows+=`<tr class="${cls}"><td>${i}</td><td>${i<=t?name(tr[i]):'·'}</td><td>${i<n?B.bits[i]:'—'}</td><td class="${i<=t&&y?'y1':''}">${i<=t?y:'·'}</td></tr>`;
+    }
+    $('trace').innerHTML=`<thead><tr><th>tick</th><th>state S₁S₀</th><th>input x</th><th>output y</th></tr></thead><tbody>${rows}</tbody>`;
+    const c=$('trace').querySelector('tr.cur'), w=$('traceWrap');
+    if(c) w.scrollTop=Math.max(0,c.offsetTop-w.clientHeight/2);
   }
 
   // ---- tabs ----
@@ -408,7 +392,12 @@ details.eqbox summary{cursor:pointer;font-weight:600;color:var(--muted)}
   }
   $('tabA').onclick=()=>setTab('A'); $('tabB').onclick=()=>setTab('B');
   document.addEventListener('keydown',e=>{
-    if(tab!=='B'||e.target.matches('input,button')) return;
+    if(e.target.matches('input,button')) return;
+    if(tab==='A'){
+      if(e.key==='ArrowDown'){e.preventDefault(); pick((A.r+1)%8);}
+      if(e.key==='ArrowUp'){e.preventDefault(); pick((A.r+7)%8);}
+      return;
+    }
     if(e.key==='ArrowRight'||e.key===' '){e.preventDefault(); tick();}
     if(e.key==='ArrowLeft'){e.preventDefault(); $('bBack').click();}
   });
