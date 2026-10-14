@@ -27,7 +27,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     font-size: 15px; line-height: 1.45;
   }
-  .wrap { max-width: 1120px; margin: 0 auto; }
+  .wrap { max-width: 1400px; margin: 0 auto; }
   h1 { font-size: 1.35rem; margin: 0 0 4px; }
   .sub { color: #555; margin: 0 0 14px; }
   .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
@@ -71,7 +71,7 @@
   .summary .warn { color: #b06000; font-weight: 600; }
   .stage { display: flex; gap: 12px; align-items: flex-start; }
   .stage-wrap { overflow-x: auto; flex: 1; min-width: 0; }
-  .ram { position: relative; flex: none; width: 200px; max-height: 640px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; font-size: .85em; }
+  .ram { position: relative; flex: none; width: 190px; max-height: 640px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; font-size: .85em; }
   .ram h2 { font-size: 1em; margin: 0; padding: 6px 10px; background: var(--panel); position: sticky; top: 0; z-index: 1; }
   .ram h2 span { font-weight: 400; color: #666; font-size: .9em; }
   .ram .note { padding: 4px 10px; color: #555; min-height: 1.4em; }
@@ -273,7 +273,7 @@
   }
   // glow / tracker color for each step; steps 4 to 6 depend on hit or miss
   function stepColor(i) {
-    var base = ["#cfa6e3", "#ffb84d", "#ffe066"];
+    var base = ["#cfa6e3", "#ffb84d", "#9cc9ff"];
     if (i < 3) return base[i];
     return isHit() ? "#86dba0" : "#f4a0a0";
   }
@@ -356,8 +356,8 @@
       want.sort(function (a, b) { return a - b; });
       want.forEach(function (r, j) { if (j > 0 && r - want[j - 1] > 1) show.push(null); show.push(r); });
     }
-    var RY = 196, RH = 34, AX = 200, VW = 44, TW = 170, DX = AX + VW + TW;
-    var DW = Math.min(520, c.block * Math.max(110, c.word * 8 * 3.4));
+    var big = c.slots <= 8, RY = 196, RH = big ? 44 : 34, AX = 200, VW = big ? 54 : 44, TW = big ? 200 : 170, DX = AX + VW + TW;
+    var DW = Math.min(520, c.block * Math.max(big ? 190 : 110, c.word * 8 * 3.4));
     if (DX + DW > 1000) DW = 1000 - DX;
     var cw = DW / c.block, AB = RY + show.length * RH;
 
@@ -377,7 +377,7 @@
     var selY = null;
     show.forEach(function (r, j) {
       var y = RY + j * RH;
-      if (r === null) { txt(AX + (VW + TW + DW) / 2, y + 22, "⋮", "mid t-big t-grey"); txt(DCX + DCW + 30, y + 22, "⋮", "mid t-grey"); return; }
+      if (r === null) { txt(AX + (VW + TW + DW) / 2, y + RH / 2 + 6, "⋮", "mid t-big t-grey"); txt(DCX + DCW + 30, y + RH / 2 + 6, "⋮", "mid t-grey"); return; }
       var R = row(r), isSel = r === sel, lit = isSel && st >= 1;
       if (lit) { el(top, "rect", { x: AX, y: y, width: VW + TW + DW, height: RH, "class": "rowhl", fill: stepColor(1) }); selY = y; }
       if (isSel && S.look && S.look.filledNow && st >= 5) el(top, "rect", { x: AX, y: y, width: VW + TW + DW, height: RH, "class": "rowfill", opacity: .7 });
@@ -385,15 +385,15 @@
       txt(DCX + DCW + 6, y + RH / 2 - 4, (F.ix <= 10 ? bin(r, F.ix) : String(r)), "t-tiny mono t-addr");
       el(top, "rect", { x: AX, y: y, width: VW, height: RH, "class": "cellr", "fill-opacity": 0 });
       el(top, "rect", { x: AX + VW, y: y, width: TW, height: RH, "class": "cellr", "fill-opacity": 0 });
-      txt(AX + VW / 2, y + 22, R.valid ? "1" : "0", "mid mono t-b");
+      el(top, "text", { x: AX + VW / 2, y: y + RH / 2 + 6, "class": "mid mono t-b", "font-size": big ? 18 : 14 }, R.valid ? "1" : "0");
       var tagS = bin(R.tag, F.tag);
-      var tfs = Math.min(14, (TW - 10) / (tagS.length * 0.62));
-      el(top, "text", { x: AX + VW + TW / 2, y: y + 22, "class": "mid mono" + (R.valid ? "" : " t-grey"), "font-size": tfs.toFixed(1) }, tagS);
+      var tfs = Math.min(big ? 18 : 14, (TW - 10) / (tagS.length * 0.62));
+      el(top, "text", { x: AX + VW + TW / 2, y: y + RH / 2 + 6, "class": "mid mono" + (R.valid ? "" : " t-grey"), "font-size": tfs.toFixed(1) }, tagS);
       for (var k = 0; k < c.block; k++) {
         el(top, "rect", { x: DX + cw * k, y: y, width: cw, height: RH, "class": "cellr", "fill-opacity": 0 });
         var ws = wordStr(R.words[k]);
-        var wfs = Math.min(13, (cw - 8) / (ws.length * 0.62));
-        el(top, "text", { x: DX + cw * k + cw / 2, y: y + 22, "class": "mid mono " + (R.valid ? "t-dout" : "t-grey"), "font-size": wfs.toFixed(1) }, ws);
+        var wfs = Math.min(big ? 17 : 13, (cw - 8) / (ws.length * 0.62));
+        el(top, "text", { x: DX + cw * k + cw / 2, y: y + RH / 2 + 6, "class": "mid mono " + (R.valid ? "t-dout" : "t-grey"), "font-size": wfs.toFixed(1) }, ws);
       }
     });
     txt(DCX + DCW / 2, AB + 22, c.slots + " slots", "mid t-tiny t-grey");
@@ -467,7 +467,8 @@
     }
 
     var H = Math.max(GY + 50, outY + 90);
-    SVG.setAttribute("viewBox", "0 0 1100 " + Math.ceil(H));
+    var bb = SVG.getBBox(), x0 = Math.max(0, Math.floor(bb.x) - 12), x1 = Math.ceil(bb.x + bb.width) + 12;
+    SVG.setAttribute("viewBox", x0 + " 0 " + (x1 - x0) + " " + Math.ceil(H));
   }
 
   // ---------- text ----------
