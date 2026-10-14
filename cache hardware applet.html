@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cache Hardware Explorer</title>
+<style>
+  :root {
+    --addr: #7d28a0;
+    --din: #1464d2;
+    --dout: #c81e1e;
+    --we: #148240;
+    --ink: #1a1a1a;
+    --pending: #d0d0d0;
+    --bg: #ffffff;
+    --panel: #f6f4f8;
+    --addr-soft: #efe2f5;
+    --dout-soft: #fbe3e3;
+    --we-soft: #e1f3e8;
+    --hl: #ffd84d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.45;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: #555; margin: 0 0 14px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tab { border: 1px solid #ccc; background: #fff; padding: 6px 16px; border-radius: 6px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-start;
+    background: var(--panel); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;
+  }
+  .field { display: flex; flex-direction: column; gap: 2px; }
+  .field label { font-weight: 600; font-size: .92em; }
+  .field select { font: inherit; padding: 3px 6px; border-radius: 6px; border: 1px solid #999; background: #fff; }
+  .field input {
+    font: inherit; font-size: 1.1rem; font-weight: 700; letter-spacing: .08em;
+    width: 15em; padding: 4px 8px; border-radius: 6px; border: 2px solid var(--addr); color: var(--addr); background: #fff;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .field input.bad { border-color: #e08a00; background: #fff6e5; }
+  .field .msg { font-size: .8em; color: #b06000; min-height: 1.1em; max-width: 22em; }
+  .stepbox { display: flex; flex-direction: column; gap: 6px; }
+  .steprow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  label.chk { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; }
+  .btn { border: 1px solid #999; background: #fff; border-radius: 6px; padding: 5px 12px; font: inherit; cursor: pointer; }
+  .btn.primary { background: var(--addr); color: #fff; border-color: var(--addr); font-weight: 600; }
+  .btn.small { padding: 2px 9px; font-size: .88em; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .tab:focus-visible, .btn:focus-visible, .field input:focus-visible, .field select:focus-visible { outline: 3px solid #f0a020; outline-offset: 2px; }
+  .tracker { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; font-size: .88em; }
+  .tracker li { padding: 3px 9px; border-radius: 12px; background: #eee; color: #777; }
+  .tracker li.done { background: #e6e6e6; color: #333; }
+  .tracker li.now { background: var(--ink); color: #fff; font-weight: 600; }
+  .explain {
+    min-height: 3.2em; background: #fff; border-left: 4px solid var(--dout);
+    padding: 8px 12px; margin-bottom: 8px; border-radius: 0 6px 6px 0; box-shadow: 0 0 0 1px #eee inset;
+  }
+  .summary {
+    display: flex; flex-wrap: wrap; gap: 6px 26px; font-size: .92em;
+    background: #fff; border: 1px solid #e3dde8; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;
+  }
+  .summary b { color: var(--addr); }
+  .summary .warn { color: #b06000; font-weight: 600; }
+  .stage-wrap { overflow-x: auto; }
+  svg.diagram { width: 100%; height: auto; display: block; min-width: 760px; }
+  .hint { color: #666; font-size: .9em; margin-top: 6px; }
+  .tryrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: .88em; color: #555; }
+
+  .w { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .w.addr { stroke: var(--addr); } .w.dout { stroke: var(--dout); } .w.we { stroke: var(--we); }
+  .w.ink { stroke: var(--ink); } .w.pending { stroke: var(--pending); }
+  .w.thick { stroke-width: 3.4; }
+  .glow { fill: none; stroke: var(--hl); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .3s; }
+  .glow.on { opacity: .6; }
+  .gate { fill: #fff; stroke: var(--ink); stroke-width: 2; transition: fill .25s; }
+  .gate.addr { stroke: var(--addr); } .gate.dout { stroke: var(--dout); } .gate.we { stroke: var(--we); }
+  .gate.lit.addr { fill: var(--addr-soft); } .gate.lit.dout { fill: var(--dout-soft); } .gate.lit.we, .gate.lit.ink { fill: var(--we-soft); }
+  .gate.lit.bad { fill: #fde2c8; }
+  .fld { stroke: var(--addr); stroke-width: 2; fill: #fff; }
+  .fld.lit { fill: var(--addr-soft); }
+  .fld.boff { stroke: #888; }
+  .cellr { fill: #fff; stroke: var(--ink); stroke-width: 1.4; }
+  .rowhl { fill: var(--hl); opacity: .45; }
+  .rowfill { fill: var(--we-soft); }
+  text { font-family: inherit; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .t-addr { fill: var(--addr); } .t-dout { fill: var(--dout); } .t-we { fill: var(--we); } .t-grey { fill: #777; }
+  .t-small { font-size: 12px; } .t-tiny { font-size: 10.5px; } .t-big { font-size: 17px; font-weight: 700; }
+  .t-b { font-weight: 700; }
+  .mid { text-anchor: middle; } .end { text-anchor: end; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cache Hardware Explorer</h1>
+  <p class="sub">A direct-mapped cache, reads only. Type a (RAM) address, then watch how its bits split up and which hardware they travel through. The cache holds <em>copies</em> of RAM data; its rows are picked by an <em>index</em>, not an address.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-simple" aria-selected="true">Simple</button>
+    <button class="tab" role="tab" id="tab-config" aria-selected="false">Configurable</button>
+  </div>
+
+  <div class="controls" id="cfg-controls">
+    <div class="field"><label for="c-abits">Address bits</label>
+      <select id="c-abits"><option>6</option><option>8</option><option>16</option><option selected>32</option></select></div>
+    <div class="field"><label for="c-slots">Number of slots</label>
+      <select id="c-slots"><option>4</option><option>8</option><option>16</option><option>64</option><option selected>1024</option></select></div>
+    <div class="field"><label for="c-word">Word size</label>
+      <select id="c-word"><option value="1">1 byte</option><option value="2">2 bytes</option><option value="4" selected>4 bytes</option><option value="8">8 bytes</option></select></div>
+    <div class="field"><label for="c-block">Block size</label>
+      <select id="c-block"><option value="1">1 word</option><option value="2">2 words</option><option value="4" selected>4 words</option><option value="8">8 words</option></select></div>
+    <div class="field"><label for="c-addressing">Addressability</label>
+      <select id="c-addressing"><option value="byte" selected>byte-addressable</option><option value="word">word-addressable</option></select></div>
+  </div>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="controls">
+    <div class="field">
+      <label for="in-addr">Address to look up</label>
+      <input id="in-addr" autocomplete="off" spellcheck="false">
+      <span class="msg" id="msg-addr"></span>
+    </div>
+    <div class="stepbox">
+      <div class="steprow" style="margin-top:22px">
+        <button class="btn primary" id="lookup">Look up</button>
+        <button class="btn" id="back">&#9664; Back</button>
+        <button class="btn" id="next">Next step &#9654;</button>
+        <button class="btn" id="play">Play</button>
+        <button class="btn" id="reset">Reset cache</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="fill" checked> Fill the slot on a miss (copy the block from RAM)</label>
+    </div>
+  </div>
+  <div class="tryrow" id="tryrow"></div>
+
+  <ol class="tracker" id="tracker" style="margin-top:8px"></ol>
+  <div class="explain" id="explain" aria-live="polite"></div>
+
+  <div class="stage-wrap">
+    <svg class="diagram" id="svg" viewBox="0 0 1100 760" aria-label="Cache hardware diagram"></svg>
+  </div>
+  <p class="hint">Wires with a slash and a number carry that many bits. Purple = address bits, black = what is stored in the cache, green = the hit logic, red = data. Grey bits in a slot with valid = 0 are leftovers, not a copy of anything in RAM. The selected slot's bits come out on the wires below it, the same way a row is read out of RAM. Multi-byte words are read little-endian, like RISC-V.</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  var SVG = document.getElementById("svg");
+
+  var S = {
+    tab: "simple",
+    cfg: null,          // current configuration
+    filled: {},         // index -> {valid, tag, words}, overrides the preloaded contents
+    look: null,         // current lookup {v, tag, idx, wo, bo}
+    stage: -1,
+    undo: null,
+    timer: null
+  };
+
+  function log2(n) { return Math.round(Math.log(n) / Math.LN2); }
+  function pow2(n) { return Math.pow(2, n); }
+  function bin(v, n) { var s = ""; for (var i = n - 1; i >= 0; i--) s += Math.floor(v / pow2(i)) % 2; return s; }
+  function hexb(b) { return (b < 16 ? "0" : "") + b.toString(16).toUpperCase(); }
+
+  function readCfg() {
+    if (S.tab === "simple") return { A: 6, slots: 4, word: 1, block: 1, byteAddr: true };
+    return {
+      A: +document.getElementById("c-abits").value,
+      slots: +document.getElementById("c-slots").value,
+      word: +document.getElementById("c-word").value,
+      block: +document.getElementById("c-block").value,
+      byteAddr: document.getElementById("c-addressing").value === "byte"
+    };
+  }
+  function fields(c) {
+    var bo = c.byteAddr ? log2(c.word) : 0, wo = log2(c.block), ix = log2(c.slots);
+    return { bo: bo, wo: wo, ix: ix, tag: c.A - ix - wo - bo, wbits: c.word * 8, dbits: c.word * 8 * c.block };
+  }
+
+  // ---------- cache contents (deterministic preload, overridden by fills) ----------
+  function preload(i, F) {
+    var valid = (i % 4) !== 2;
+    var tag = (i * 3 + 1) % pow2(Math.min(F.tag, 30));
+    return { valid: valid, tag: tag, words: valid ? ramWords(tag, i, F) : makeWords(i * 7 + 3, S.cfg) };
+  }
+  // RAM contents: same made-up values as the cache trace applet, ram[a] = (37a + 11) mod 256 for byte address a
+  function ramByte(a) { return (a * 37 + 11) % 256; }
+  function ramWords(tag, idx, F) {
+    var c = S.cfg, out = [];
+    for (var k = 0; k < c.block; k++) {
+      var bytes = [];
+      for (var b = 0; b < c.word; b++) {
+        var a = c.byteAddr ? compose(tag, idx, k, b, F) : compose(tag, idx, k, 0, F) * c.word + b;
+        bytes.push(ramByte(a));
+      }
+      out.push(bytes);
+    }
+    return out;
+  }
+  function makeWords(seed, c) {
+    var out = [];
+    for (var k = 0; k < c.block; k++) {
+      var bytes = [];
+      for (var b = 0; b < c.word; b++) bytes.push((seed * 29 + k * 53 + b * 13 + 7) & 255);
+      out.push(bytes);
+    }
+    return out;
+  }
+  function row(i) { var F = fields(S.cfg); return S.filled[i] || preload(i, F); }
+  function wordStr(bytes) {
+    if (bytes.length === 1) return bin(bytes[0], 8);
+    return "0x" + bytes.slice().reverse().map(hexb).join("");   // little-endian, like RISC-V: the byte at the lowest address is the low byte
+  }
+
+  // ---------- address parsing ----------
+  function parseAddr(str, A) {
+    var s = str.trim().replace(/[\s_]/g, "");
+    if (!s) return { err: "Type an address." };
+    var v;
+    if (/^0x[0-9a-f]+$/i.test(s)) v = parseInt(s.slice(2), 16);
+    else if (/^0b[01]+$/i.test(s)) v = parseInt(s.slice(2), 2);
+    else if (/^[01]+$/.test(s) && s.length === A) v = parseInt(s, 2);
+    else if (/^[0-9]+$/.test(s)) v = parseInt(s, 10);
+    else return { err: "Use binary (" + A + " bits), hex (0x...), or decimal." };
+    if (v >= pow2(A)) return { err: "Too big for a " + A + "-bit address." };
+    return { v: v };
+  }
+  function split(v, F) {
+    var bo = v % pow2(F.bo); v = Math.floor(v / pow2(F.bo));
+    var wo = v % pow2(F.wo); v = Math.floor(v / pow2(F.wo));
+    var ix = v % pow2(F.ix); v = Math.floor(v / pow2(F.ix));
+    return { bo: bo, wo: wo, idx: ix, tag: v };
+  }
+  function compose(tag, idx, wo, bo, F) {
+    return ((tag * pow2(F.ix) + idx) * pow2(F.wo) + wo) * pow2(F.bo) + bo;
+  }
+  function fmtAddr(v, A) { return A <= 16 ? bin(v, A) : "0x" + v.toString(16).toUpperCase().padStart(A / 4, "0"); }  // 6/8/16-bit: binary only
+
+  // ---------- steps ----------
+  function steps() {
+    var F = fields(S.cfg);
+    return ["Split the address", "Index picks a slot",
+            S.cfg.block > 1 ? "Compare tags + mux picks the word (in parallel)" : "Compare tags + read data (in parallel)",
+            "Valid AND match = Hit", "Hit decides: use the data?", "Result"];
+  }
+  function isHit() {
+    if (!S.look) return false;
+    var r = S.look.rowBefore;
+    return r.valid && r.tag === S.look.tag;
+  }
+
+  // ---------- SVG helpers ----------
+  function el(parent, name, attrs, text) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    parent.appendChild(e);
+    return e;
+  }
+  function pts(p) { return "M" + p.map(function (q) { return q[0] + "," + q[1]; }).join(" L"); }
+  var glowLayer, top;
+  function wire(points, kind, on, thick) {
+    var d = pts(points);
+    el(glowLayer, "path", { d: d, "class": "glow" + (on ? " on" : "") });
+    return el(top, "path", { d: d, "class": "w " + kind + (thick ? " thick" : "") });
+  }
+  // slash-and-number bus width on a vertical (dir "v") or horizontal ("h") wire
+  function width(x, y, n, dir, cls) {
+    if (dir === "v") el(top, "path", { d: "M" + (x - 7) + "," + (y + 6) + " L" + (x + 7) + "," + (y - 6), "class": "w ink" });
+    else el(top, "path", { d: "M" + (x - 6) + "," + (y + 7) + " L" + (x + 6) + "," + (y - 7), "class": "w ink" });
+    el(top, "text", { x: dir === "v" ? x + 10 : x - 4, y: dir === "v" ? y + 4 : y - 11, "class": "t-small t-b " + (cls || "") }, String(n));
+  }
+  function txt(x, y, s, cls) { return el(top, "text", { x: x, y: y, "class": cls || "" }, s); }
+
+  // ---------- drawing ----------
+  function draw() {
+    while (SVG.firstChild) SVG.removeChild(SVG.firstChild);
+    glowLayer = el(SVG, "g", {}); top = el(SVG, "g", {});
+    var c = S.cfg, F = fields(c), st = S.stage, L = S.look;
+    if (F.tag < 1) {
+      txt(550, 120, "Not enough address bits for this cache: the tag would have " + F.tag + " bits.", "mid t-big");
+      txt(550, 150, "Choose more address bits, fewer slots, or smaller blocks.", "mid");
+      SVG.setAttribute("viewBox", "0 0 1100 200");
+      return;
+    }
+
+    // ----- address bar -----
+    var segs = [{ k: "tag", n: F.tag, name: "tag" }, { k: "ix", n: F.ix, name: "index" }];
+    if (F.wo) segs.push({ k: "wo", n: F.wo, name: "word offset" });
+    if (F.bo) segs.push({ k: "bo", n: F.bo, name: "byte offset" });
+    var BX = 250, BW = 700, BY = 46, BH = 40, minW = 92;
+    var extra = 0, totalFlex = 0;
+    segs.forEach(function (s) { s.w = BW * s.n / c.A; if (s.w < minW) { extra += minW - s.w; s.w = minW; } else totalFlex += s.w; });
+    segs.forEach(function (s) { if (s.w > minW && totalFlex) s.w -= extra * s.w / totalFlex; });
+    var x = BX, hi = c.A - 1;
+    txt(BX - 14, BY + 26, "address from the CPU", "end t-addr t-b");
+    var vals = L ? { tag: L.tag, ix: L.idx, wo: L.wo, bo: L.bo } : null;
+    segs.forEach(function (s) {
+      s.x = x; s.cx = x + s.w / 2;
+      el(top, "rect", { x: x, y: BY, width: s.w, height: BH, "class": "fld" + (s.k === "bo" ? " boff" : "") + (L && st >= 0 && s.k !== "bo" ? " lit" : "") });
+      txt(s.cx, BY - 8, s.name + " (" + s.n + ")", "mid t-small t-b " + (s.k === "bo" ? "t-grey" : "t-addr"));
+      var lo = hi - s.n + 1;
+      txt(s.x + s.w - 4, BY + BH + 15, s.n === 1 ? String(hi) : hi + "–" + lo, "end t-tiny t-grey");
+      hi = lo - 1;
+      if (vals) {
+        var sb = bin(vals[s.k], s.n);
+        var fs = Math.min(16, (s.w - 10) / (sb.length * 0.62));
+        el(top, "text", { x: s.cx, y: BY + 26, "class": "mid mono t-b " + (s.k === "bo" ? "t-grey" : "t-addr"), "font-size": fs.toFixed(1) }, sb);
+      }
+      x += s.w;
+    });
+    var seg = {}; segs.forEach(function (s) { seg[s.k] = s; });
+
+    // ----- which rows to draw -----
+    var sel = L ? L.idx : -1, show = [];
+    if (c.slots <= 8) { for (var i = 0; i < c.slots; i++) show.push(i); }
+    else {
+      var want = [0, 1, 2, c.slots - 1]; if (sel >= 0 && want.indexOf(sel) < 0) want.push(sel);
+      want.sort(function (a, b) { return a - b; });
+      want.forEach(function (r, j) { if (j > 0 && r - want[j - 1] > 1) show.push(null); show.push(r); });
+    }
+    var RY = 196, RH = 34, AX = 200, VW = 44, TW = 170, DX = AX + VW + TW;
+    var DW = Math.min(520, c.block * Math.max(110, c.word * 8 * 3.4));
+    if (DX + DW > 1000) DW = 1000 - DX;
+    var cw = DW / c.block, AB = RY + show.length * RH;
+
+    // headers
+    txt(AX + VW / 2, RY - 10, "valid", "mid t-small t-b");
+    txt(AX + VW + TW / 2, RY - 10, "tag", "mid t-small t-b");
+    if (c.block === 1) txt(DX + DW / 2, RY - 10, "data (" + F.dbits + " bits)", "mid t-small t-b t-dout");
+    else for (var k = 0; k < c.block; k++) txt(DX + cw * k + cw / 2, RY - 10, "word " + k, "mid t-small t-b t-dout");
+    txt(DX + DW + 8, RY - 26, "", "");
+
+    // decoder
+    var DCX = 46, DCW = 52;
+    el(top, "rect", { x: DCX, y: RY - 4, width: DCW, height: AB - RY + 8, rx: 4, "class": "gate addr" + (L && st >= 1 ? " lit" : "") });
+    var dt = txt(DCX + DCW / 2, (RY + AB) / 2, "decoder", "mid t-small t-addr t-b");
+    dt.setAttribute("transform", "rotate(-90 " + (DCX + DCW / 2) + " " + ((RY + AB) / 2) + ")");
+
+    var selY = null;
+    show.forEach(function (r, j) {
+      var y = RY + j * RH;
+      if (r === null) { txt(AX + (VW + TW + DW) / 2, y + 22, "⋮", "mid t-big t-grey"); txt(DCX + DCW + 30, y + 22, "⋮", "mid t-grey"); return; }
+      var R = row(r), isSel = r === sel, lit = isSel && st >= 1;
+      if (lit) { el(top, "rect", { x: AX, y: y, width: VW + TW + DW, height: RH, "class": "rowhl" }); selY = y; }
+      if (isSel && S.look && S.look.filledNow && st >= 5) el(top, "rect", { x: AX, y: y, width: VW + TW + DW, height: RH, "class": "rowfill", opacity: .7 });
+      wire([[DCX + DCW, y + RH / 2], [AX, y + RH / 2]], lit ? "addr" : "pending", lit, lit);
+      txt(DCX + DCW + 6, y + RH / 2 - 4, (F.ix <= 10 ? bin(r, F.ix) : String(r)), "t-tiny mono t-addr");
+      el(top, "rect", { x: AX, y: y, width: VW, height: RH, "class": "cellr", "fill-opacity": 0 });
+      el(top, "rect", { x: AX + VW, y: y, width: TW, height: RH, "class": "cellr", "fill-opacity": 0 });
+      txt(AX + VW / 2, y + 22, R.valid ? "1" : "0", "mid mono t-b");
+      var tagS = bin(R.tag, F.tag);
+      var tfs = Math.min(14, (TW - 10) / (tagS.length * 0.62));
+      el(top, "text", { x: AX + VW + TW / 2, y: y + 22, "class": "mid mono" + (R.valid ? "" : " t-grey"), "font-size": tfs.toFixed(1) }, tagS);
+      for (var k = 0; k < c.block; k++) {
+        el(top, "rect", { x: DX + cw * k, y: y, width: cw, height: RH, "class": "cellr", "fill-opacity": 0 });
+        var ws = wordStr(R.words[k]);
+        var wfs = Math.min(13, (cw - 8) / (ws.length * 0.62));
+        el(top, "text", { x: DX + cw * k + cw / 2, y: y + 22, "class": "mid mono " + (R.valid ? "t-dout" : "t-grey"), "font-size": wfs.toFixed(1) }, ws);
+      }
+    });
+    txt(DCX + DCW / 2, AB + 22, c.slots + " slots", "mid t-tiny t-grey");
+
+    // ----- index wire -> decoder -----
+    var on1 = L && st >= 1;
+    wire([[seg.ix.cx, BY + BH], [seg.ix.cx, 128], [DCX + DCW / 2, 128], [DCX + DCW / 2, RY - 4]], "addr", on1);
+    width(DCX + DCW / 2, 160, F.ix, "v", "t-addr");
+
+    // ----- tag path -----
+    var CX = AX + VW + TW / 2, CY = AB + 70, LANE = 172, on2 = L && st >= 2;
+    wire([[seg.tag.cx, BY + BH], [seg.tag.cx, 108], [LANE, 108], [LANE, CY], [CX - 20, CY]], "addr", on2);
+    width(LANE, 150, F.tag, "v", "t-addr");
+    wire([[CX, AB], [CX, CY - 20]], "ink", on2);
+    width(CX, AB + 22, F.tag, "v");
+    var match = L ? (S.look.rowBefore.tag === L.tag) : false;
+    el(top, "circle", { cx: CX, cy: CY, r: 20, "class": "gate ink" + (on2 ? (match ? " lit" : " lit bad") : "") });
+    txt(CX, CY + 7, "=", "mid t-big");
+    if (on2) txt(CX + 28, CY - 14, match ? "tags match" : "tags differ", "t-small t-b " + (match ? "t-we" : "t-dout"));
+
+    // ----- valid + AND -> Hit -----
+    var VX = AX + VW / 2, GX = CX + 60, GY = CY + 62, on3 = L && st >= 3, hit = isHit();
+    wire([[CX, CY + 20], [CX, GY - 10], [GX, GY - 10]], "we", on3);
+    wire([[VX, AB], [VX, GY + 10], [GX, GY + 10]], "we", on3);
+    txt(VX + 6, AB + 34, "valid", "t-tiny t-grey");
+    el(top, "path", { d: "M" + GX + "," + (GY - 20) + " H" + (GX + 22) + " A20,20 0 0 1 " + (GX + 22) + "," + (GY + 20) + " H" + GX + " Z",
+      "class": "gate we" + (on3 ? " lit" : "") });
+    wire([[GX + 42, GY], [GX + 100, GY]], "we", on3, on3);
+    txt(GX + 108, GY + 6, "Hit" + (on3 ? " = " + (hit ? 1 : 0) : ""), "t-big t-we");
+
+    // ----- data path / mux -----
+    var on4 = L && st >= 2, MY = AB + 66, MH = 44, OUTX, outY, SXL = null;
+    if (c.block > 1) {
+      var mL = DX + 10, mR = DX + DW - 10;
+      for (var k = 0; k < c.block; k++) {
+        var wx = DX + cw * k + cw / 2, pick = L && k === L.wo;
+        wire([[wx, AB], [wx, MY]], "dout", on4 && pick);
+        if (k === 0) width(wx, AB + 22, F.wbits, "v", "t-dout");
+      }
+      el(top, "path", { d: "M" + mL + "," + MY + " L" + mR + "," + MY + " L" + (mR - 30) + "," + (MY + MH) + " L" + (mL + 30) + "," + (MY + MH) + " Z",
+        "class": "gate dout" + (on4 ? " lit" : "") });
+      txt((mL + mR) / 2, MY + 20, "mux", "mid t-small t-b t-dout");
+      txt((mL + mR) / 2, MY + 36, c.block + "-to-1, " + F.wbits + " bits wide", "mid t-tiny t-dout");
+      // word offset select
+      SXL = Math.max(mR + 60, seg.wo.cx);
+      wire([[seg.wo.cx, BY + BH], [seg.wo.cx, 118], [SXL, 118], [SXL, MY + MH / 2], [mR - 15, MY + MH / 2]], "addr", on4);
+      width(SXL, MY - 24, F.wo, "v", "t-addr");
+      txt(SXL + 8, MY + MH / 2 + 18, "select = word offset", "t-tiny t-addr");
+      OUTX = (mL + mR) / 2; outY = MY + MH;
+      txt(SXL + 8, MY + MH / 2 + 32, "(= " + F.wbits + " one-bit " + c.block + "-to-1", "t-tiny t-grey");
+      txt(SXL + 8, MY + MH / 2 + 45, "muxes side by side;", "t-tiny t-grey");
+      txt(SXL + 8, MY + MH / 2 + 58, "mux j picks bit j of each word)", "t-tiny t-grey");
+    } else {
+      OUTX = DX + DW / 2; outY = AB;
+    }
+    wire([[OUTX, outY], [OUTX, outY + 40]], "dout", on4, on4);
+    width(OUTX, outY + 14, F.wbits, "v", "t-dout");
+    var dataTxt = "Data";
+    if (on4 && L) dataTxt += " = " + wordStr(S.look.rowBefore.words[L.wo]) + (hit || st < 4 ? "" : "  (miss: not a copy of this address)");
+    // label sits to the right of the end of the data wire, clear of the comparator / Hit labels
+    txt(OUTX + 10, outY + 44, dataTxt, "t-b t-dout mono");
+
+    // ----- byte offset -----
+    if (F.bo) {
+      wire([[seg.bo.cx, BY + BH], [seg.bo.cx, BY + BH + 30]], "pending", false);
+      var nx = (SXL !== null ? Math.min(SXL, seg.bo.cx) : seg.bo.cx) - 10;
+      txt(nx, BY + BH + 46, "byte offset: which byte in the word", "t-tiny t-grey end");
+      txt(nx, BY + BH + 58, "(ignored for a whole-word read)", "t-tiny t-grey end");
+    }
+
+    var H = Math.max(GY + 50, outY + 90);
+    SVG.setAttribute("viewBox", "0 0 1100 " + Math.ceil(H));
+  }
+
+  // ---------- text ----------
+  function explain() {
+    var c = S.cfg, F = fields(c), L = S.look, st = S.stage;
+    if (!L) return "Type an address and press <b>Look up</b>. (Binary with exactly " + c.A + " bits, hex like 0x1F, or decimal.)";
+    var R = L.rowBefore, ixS = bin(L.idx, F.ix), tagS = bin(L.tag, F.tag), hit = isHit();
+    var parts = "tag " + tagS + ", index " + ixS + (F.wo ? ", word offset " + bin(L.wo, F.wo) : "") + (F.bo ? ", byte offset " + bin(L.bo, F.bo) : "");
+    switch (st) {
+      case 0: return "The address " + fmtAddr(L.v, c.A) + " splits into " + parts + ". Nothing is computed: the wires for each group of bits just go to different places.";
+      case 1: return "The " + F.ix + " index bits " + ixS + " go into the decoder, which selects slot " + ixS + " (slot " + L.idx + " in base ten). Only this slot could hold a copy of this address.";
+      case 2: return "Two things happen <b>at the same time</b>. (1) The slot's stored tag (" + bin(R.tag, F.tag) + (R.valid ? "" : ", leftover bits since valid = 0") + ") is compared with the address's tag (" + tagS + "): " +
+        (R.tag === L.tag ? "they match. " : (R.valid ? "they are different, so this slot holds a copy of some other address. " : "they are different. ")) +
+        (c.block > 1
+          ? "(2) Meanwhile the slot's " + c.block + " words go into the mux, and the word offset " + bin(L.wo, F.wo) + " picks word " + L.wo + ". The \"mux\" is really " + F.wbits + " one-bit " + c.block + "-to-1 muxes side by side: mux 0 takes bit 0 of each word, mux 1 takes bit 1 of each word, and so on, all with the same select. Together their outputs are the whole chosen word."
+          : "(2) Meanwhile the slot's data is read out. Nothing waits for the tag check.");
+      case 3: return "Hit = (tags match) AND (valid = 1). Here valid = " + (R.valid ? 1 : 0) + " and the tags " + (R.tag === L.tag ? "match" : "differ") + ", so Hit = " + (hit ? 1 : 0) + "." +
+        (!R.valid ? " (A slot with valid = 0 holds leftover bits, not a real copy.)" : "");
+      case 4: return hit
+        ? "Hit = 1, so the data that already came out" + (c.block > 1 ? " of the mux" : "") + " is the right data, and the CPU uses it. Reading the data in parallel with the tag check is what makes a hit fast."
+        : "Hit = 0, so the data that came out" + (c.block > 1 ? " of the mux" : "") + " is thrown away: it is not a copy of this address. The block has to come from RAM.";
+      case 5:
+        if (hit) return "<b>Hit.</b> The CPU gets " + wordStr(R.words[L.wo]) + " from the cache, without going to RAM.";
+        return "<b>Miss.</b> The block containing this address is copied from RAM into slot " + ixS + ", with tag " + tagS + " and valid = 1" +
+          (L.filledNow ? " (done: the slot is shaded green). Look up the same address again to see a hit." : ". (Filling is turned off, so the slot is left as it was.)") +
+          (R.valid && R.tag !== L.tag ? " The copy that was there before is evicted." : "");
+    }
+    return "";
+  }
+
+  function summary() {
+    var c = S.cfg, F = fields(c), el2 = document.getElementById("summary");
+    if (F.tag < 1) { el2.innerHTML = '<span class="warn">This configuration does not fit: tag bits = ' + F.tag + '.</span>'; return; }
+    var rowBits = 1 + F.tag + F.dbits, total = rowBits * c.slots, dataBytes = c.slots * c.block * c.word;
+    function size(bits, unit) {
+      var v = bits, u = ["", "Ki", "Mi", "Gi"], i = 0;
+      while (v >= 1024 && v % 1024 === 0 && i < 3) { v /= 1024; i++; }
+      return v + " " + u[i] + unit;
+    }
+    var f = [];
+    f.push("<span>index bits = log<sub>2</sub>(" + c.slots + " slots) = <b>" + F.ix + "</b></span>");
+    if (F.wo) f.push("<span>word offset = log<sub>2</sub>(" + c.block + " words/block) = <b>" + F.wo + "</b></span>");
+    if (F.bo) f.push("<span>byte offset = log<sub>2</sub>(" + c.word + " bytes/word) = <b>" + F.bo + "</b></span>");
+    f.push("<span>tag = " + c.A + " − " + F.ix + (F.wo ? " − " + F.wo : "") + (F.bo ? " − " + F.bo : "") + " = <b>" + F.tag + "</b></span>");
+    f.push("<span>each slot stores 1 (valid) + " + F.tag + " (tag) + " + F.dbits + " (data) = <b>" + rowBits + " bits</b></span>");
+    f.push("<span>whole cache: " + c.slots + " × " + rowBits + " = <b>" + total.toLocaleString() + " bits</b>" + (total % 1024 === 0 ? " = " + size(total, "bits") : "") +
+           " (data alone: " + size(dataBytes, "B") + ")</span>");
+    if (!c.byteAddr) f.push("<span>word-addressable: each address names one " + c.word + "-byte word, so there is no byte offset</span>");
+    el2.innerHTML = f.join("");
+  }
+
+  function tryButtons() {
+    var c = S.cfg, F = fields(c), box = document.getElementById("tryrow");
+    box.innerHTML = "";
+    if (F.tag < 1) return;
+    var hitI = -1, missI = -1, invI = -1;
+    for (var i = 0; i < Math.min(c.slots, 64); i++) {
+      var R = row(i);
+      if (R.valid && hitI < 0) hitI = i; else if (R.valid && missI < 0 && i !== hitI) missI = i;
+      if (!R.valid && invI < 0) invI = i;
+    }
+    var ex = [];
+    if (hitI >= 0) ex.push(["a hit", compose(row(hitI).tag, hitI, Math.min(1, pow2(F.wo) - 1), 0, F)]);
+    if (missI >= 0) ex.push(["tags differ", compose((row(missI).tag + 1) % pow2(Math.min(F.tag, 30)), missI, 0, 0, F)]);
+    if (invI >= 0) ex.push(["valid = 0", compose(5 % pow2(Math.min(F.tag, 30)), invI, 0, 0, F)]);
+    var lab = document.createElement("span"); lab.textContent = "Try:"; box.appendChild(lab);
+    ex.forEach(function (e) {
+      var b = document.createElement("button"); b.className = "btn small";
+      b.textContent = fmtAddr(e[1], c.A) + " (" + e[0] + ")";
+      b.addEventListener("click", function () { document.getElementById("in-addr").value = fmtAddr(e[1], c.A); doLookup(); });
+      box.appendChild(b);
+    });
+  }
+
+  // ---------- rendering + control ----------
+  function render() {
+    draw();
+    document.getElementById("explain").innerHTML = explain();
+    var tr = document.getElementById("tracker"); tr.innerHTML = "";
+    steps().forEach(function (s, i) {
+      var li = document.createElement("li"); li.textContent = (i + 1) + ". " + s;
+      if (S.look) { if (i < S.stage) li.className = "done"; else if (i === S.stage) li.className = "now"; }
+      tr.appendChild(li);
+    });
+    document.getElementById("back").disabled = !S.look || S.stage <= 0;
+    document.getElementById("next").disabled = !S.look || S.stage >= 5;
+  }
+  function setStage(n) {
+    var L = S.look; if (!L) return;
+    // entering / leaving the final stage applies / undoes the fill on a miss
+    if (n >= 5 && S.stage < 5 && !isHit() && document.getElementById("fill").checked) {
+      S.undo = { idx: L.idx, prev: S.filled[L.idx] };
+      S.filled[L.idx] = { valid: true, tag: L.tag, words: ramWords(L.tag, L.idx, fields(S.cfg)) };
+      L.filledNow = true;
+    }
+    if (n < 5 && S.stage >= 5 && L.filledNow && S.undo) {
+      if (S.undo.prev) S.filled[S.undo.idx] = S.undo.prev; else delete S.filled[S.undo.idx];
+      L.filledNow = false; S.undo = null;
+    }
+    S.stage = n; render();
+  }
+  function stopPlay() { clearInterval(S.timer); S.timer = null; document.getElementById("play").textContent = "Play"; }
+  function doLookup() {
+    stopPlay();
+    var c = S.cfg, F = fields(c), inp = document.getElementById("in-addr"), msg = document.getElementById("msg-addr");
+    if (F.tag < 1) return;
+    var p = parseAddr(inp.value, c.A);
+    if (p.err) { inp.classList.add("bad"); msg.textContent = p.err; return; }
+    inp.classList.remove("bad"); msg.textContent = "";
+    var sp = split(p.v, F), R = row(sp.idx);
+    S.look = { v: p.v, tag: sp.tag, idx: sp.idx, wo: sp.wo, bo: sp.bo,
+               rowBefore: { valid: R.valid, tag: R.tag, words: R.words }, filledNow: false };
+    S.undo = null; S.stage = 0; render();
+  }
+  function configure() {
+    stopPlay();
+    S.cfg = readCfg(); S.filled = {}; S.look = null; S.stage = -1; S.undo = null;
+    var F = fields(S.cfg);
+    document.getElementById("cfg-controls").classList.toggle("hidden", S.tab === "simple");
+    var inp = document.getElementById("in-addr");
+    if (F.tag >= 1) inp.value = fmtAddr(compose(row(0).tag, 0, 0, 0, F), S.cfg.A);
+    inp.classList.remove("bad"); document.getElementById("msg-addr").textContent = "";
+    summary(); tryButtons(); render();
+  }
+  function setTab(t) {
+    S.tab = t;
+    document.getElementById("tab-simple").setAttribute("aria-selected", t === "simple");
+    document.getElementById("tab-config").setAttribute("aria-selected", t === "config");
+    configure();
+  }
+
+  document.getElementById("tab-simple").addEventListener("click", function () { setTab("simple"); });
+  document.getElementById("tab-config").addEventListener("click", function () { setTab("config"); });
+  ["c-abits", "c-slots", "c-word", "c-block", "c-addressing"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", configure);
+  });
+  document.getElementById("lookup").addEventListener("click", doLookup);
+  document.getElementById("in-addr").addEventListener("keydown", function (e) { if (e.key === "Enter") doLookup(); });
+  document.getElementById("next").addEventListener("click", function () { stopPlay(); if (S.stage < 5) setStage(S.stage + 1); });
+  document.getElementById("back").addEventListener("click", function () { stopPlay(); if (S.stage > 0) setStage(S.stage - 1); });
+  document.getElementById("reset").addEventListener("click", configure);
+  document.getElementById("play").addEventListener("click", function () {
+    if (S.timer) { stopPlay(); return; }
+    if (!S.look) doLookup();
+    if (!S.look) return;
+    if (S.stage >= 5) S.look && setStage(0);
+    document.getElementById("play").textContent = "Pause";
+    S.timer = setInterval(function () { if (S.stage >= 5) { stopPlay(); return; } setStage(S.stage + 1); }, 1400);
+  });
+
+  var h = (location.hash || "").replace("#", "");
+  setTab(/^conf/.test(h) ? "config" : "simple");
+  if (/lookup/.test(h)) { doLookup(); var m = h.match(/stage(\d)/); if (m) for (var i = 0; i < +m[1]; i++) setStage(S.stage + 1); }
+})();
+</script>
+</body>
+</html>
