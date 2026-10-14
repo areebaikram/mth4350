@@ -8,14 +8,16 @@
   :root {
     --addr: #7d28a0;
     --din: #1464d2;
-    --dout: #c81e1e;
+    --dout: #1464d2;
+    --miss: #c81e1e;
+    --miss-soft: #fbe3e3;
     --we: #148240;
     --ink: #1a1a1a;
     --pending: #d0d0d0;
     --bg: #ffffff;
     --panel: #f6f4f8;
     --addr-soft: #efe2f5;
-    --dout-soft: #fbe3e3;
+    --dout-soft: #e2ecfb;
     --we-soft: #e1f3e8;
     --hl: #ffd84d;
   }
@@ -56,7 +58,7 @@
   .tracker { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; font-size: .88em; }
   .tracker li { padding: 3px 9px; border-radius: 12px; background: #eee; color: #777; }
   .tracker li.done { background: #e6e6e6; color: #333; }
-  .tracker li.now { background: var(--ink); color: #fff; font-weight: 600; }
+  .tracker li.now { color: var(--ink); font-weight: 700; box-shadow: 0 0 0 2px var(--ink) inset; }
   .explain {
     min-height: 3.2em; background: #fff; border-left: 4px solid var(--dout);
     padding: 8px 12px; margin-bottom: 8px; border-radius: 0 6px 6px 0; box-shadow: 0 0 0 1px #eee inset;
@@ -67,30 +69,44 @@
   }
   .summary b { color: var(--addr); }
   .summary .warn { color: #b06000; font-weight: 600; }
-  .stage-wrap { overflow-x: auto; }
+  .stage { display: flex; gap: 12px; align-items: flex-start; }
+  .stage-wrap { overflow-x: auto; flex: 1; min-width: 0; }
+  .ram { position: relative; flex: none; width: 200px; max-height: 640px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; font-size: .85em; }
+  .ram h2 { font-size: 1em; margin: 0; padding: 6px 10px; background: var(--panel); position: sticky; top: 0; z-index: 1; }
+  .ram h2 span { font-weight: 400; color: #666; font-size: .9em; }
+  .ram .note { padding: 4px 10px; color: #555; min-height: 1.4em; }
+  .ram table { border-collapse: collapse; width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .ram td { padding: 2px 10px; border-top: 1px solid #f0f0f0; }
+  .ram td.d { color: var(--dout); text-align: right; }
+  .ram tr.blk td { background: #f3f3f3; }
+  .ram tr.look td { background: var(--addr-soft); font-weight: 700; }
+  .ram tr.copied td { background: var(--we-soft); }
+  .ram tr.copied.look td { background: #b9e6c9; }
+  .ram tr.gap td { color: #999; text-align: center; }
+  @media (max-width: 900px) { .stage { flex-direction: column; } .ram { width: 100%; max-height: 260px; } }
   svg.diagram { width: 100%; height: auto; display: block; min-width: 760px; }
   .hint { color: #666; font-size: .9em; margin-top: 6px; }
   .tryrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: .88em; color: #555; }
 
   .w { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-  .w.addr { stroke: var(--addr); } .w.dout { stroke: var(--dout); } .w.we { stroke: var(--we); }
+  .w.addr { stroke: var(--addr); } .w.dout { stroke: var(--dout); } .w.we { stroke: var(--we); } .w.miss { stroke: var(--miss); }
   .w.ink { stroke: var(--ink); } .w.pending { stroke: var(--pending); }
   .w.thick { stroke-width: 3.4; }
-  .glow { fill: none; stroke: var(--hl); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .3s; }
+  .glow { fill: none; stroke: var(--hl); stroke-width: 13; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .3s; }
   .glow.on { opacity: .6; }
   .gate { fill: #fff; stroke: var(--ink); stroke-width: 2; transition: fill .25s; }
-  .gate.addr { stroke: var(--addr); } .gate.dout { stroke: var(--dout); } .gate.we { stroke: var(--we); }
+  .gate.addr { stroke: var(--addr); } .gate.dout { stroke: var(--dout); } .gate.we { stroke: var(--we); } .gate.miss { stroke: var(--miss); } .gate.lit.miss { fill: var(--miss-soft); }
   .gate.lit.addr { fill: var(--addr-soft); } .gate.lit.dout { fill: var(--dout-soft); } .gate.lit.we, .gate.lit.ink { fill: var(--we-soft); }
   .gate.lit.bad { fill: #fde2c8; }
   .fld { stroke: var(--addr); stroke-width: 2; fill: #fff; }
   .fld.lit { fill: var(--addr-soft); }
   .fld.boff { stroke: #888; }
   .cellr { fill: #fff; stroke: var(--ink); stroke-width: 1.4; }
-  .rowhl { fill: var(--hl); opacity: .45; }
+  .rowhl { opacity: .45; }
   .rowfill { fill: var(--we-soft); }
   text { font-family: inherit; }
   .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
-  .t-addr { fill: var(--addr); } .t-dout { fill: var(--dout); } .t-we { fill: var(--we); } .t-grey { fill: #777; }
+  .t-addr { fill: var(--addr); } .t-dout { fill: var(--dout); } .t-we { fill: var(--we); } .t-miss { fill: var(--miss); } .t-grey { fill: #777; }
   .t-small { font-size: 12px; } .t-tiny { font-size: 10.5px; } .t-big { font-size: 17px; font-weight: 700; }
   .t-b { font-weight: 700; }
   .mid { text-anchor: middle; } .end { text-anchor: end; }
@@ -136,7 +152,7 @@
         <button class="btn" id="play">Play</button>
         <button class="btn" id="reset">Reset cache</button>
       </div>
-      <label class="chk"><input type="checkbox" id="fill" checked> Fill the slot on a miss (copy the block from RAM)</label>
+      <label class="chk"><input type="checkbox" id="fill" checked> <span id="fill-lab">Fill the slot on a miss (copy the block from RAM)</span></label>
     </div>
   </div>
   <div class="tryrow" id="tryrow"></div>
@@ -144,10 +160,13 @@
   <ol class="tracker" id="tracker" style="margin-top:8px"></ol>
   <div class="explain" id="explain" aria-live="polite"></div>
 
-  <div class="stage-wrap">
-    <svg class="diagram" id="svg" viewBox="0 0 1100 760" aria-label="Cache hardware diagram"></svg>
+  <div class="stage">
+    <div class="stage-wrap">
+      <svg class="diagram" id="svg" viewBox="0 0 1100 760" aria-label="Cache hardware diagram"></svg>
+    </div>
+    <aside class="ram" id="ram" aria-label="RAM"></aside>
   </div>
-  <p class="hint">Wires with a slash and a number carry that many bits. Purple = address bits, black = what is stored in the cache, green = the hit logic, red = data. Grey bits in a slot with valid = 0 are leftovers, not a copy of anything in RAM. The selected slot's bits come out on the wires below it, the same way a row is read out of RAM. Multi-byte words are read little-endian, like RISC-V.</p>
+  <p class="hint">Wires with a slash and a number carry that many bits. Purple = address bits, black = what is stored in the cache, blue = data. In the hit logic, green = 1 and red = 0. The glow around a wire has the color of the step that used it. Grey bits in a slot with valid = 0 are leftovers, not a copy of anything in RAM. The selected slot's bits come out on the wires below it, the same way a row is read out of RAM. Multi-byte words are read little-endian, like RISC-V.</p>
 </div>
 
 <script>
@@ -252,6 +271,14 @@
             S.cfg.block > 1 ? "Compare tags + mux picks the word (in parallel)" : "Compare tags + read data (in parallel)",
             "Valid AND match = Hit", "Hit decides: use the data?", "Result"];
   }
+  // glow / tracker color for each step; steps 4 to 6 depend on hit or miss
+  function stepColor(i) {
+    var base = ["#cfa6e3", "#ffb84d", "#ffe066"];
+    if (i < 3) return base[i];
+    return isHit() ? "#86dba0" : "#f4a0a0";
+  }
+  function unit(c) { return c.block > 1 ? "block" : (c.word > 1 ? "word" : "data"); }
+  function unitPhrase(c) { return c.block > 1 ? "the block containing this address" : (c.word > 1 ? "the word containing this address" : "the data at this address"); }
   function isHit() {
     if (!S.look) return false;
     var r = S.look.rowBefore;
@@ -268,9 +295,10 @@
   }
   function pts(p) { return "M" + p.map(function (q) { return q[0] + "," + q[1]; }).join(" L"); }
   var glowLayer, top;
-  function wire(points, kind, on, thick) {
+  function wire(points, kind, on, thick, step) {
     var d = pts(points);
-    el(glowLayer, "path", { d: d, "class": "glow" + (on ? " on" : "") });
+    var g = el(glowLayer, "path", { d: d, "class": "glow" + (on ? " on" : "") });
+    if (step != null) g.style.stroke = stepColor(step);
     return el(top, "path", { d: d, "class": "w " + kind + (thick ? " thick" : "") });
   }
   // slash-and-number bus width on a vertical (dir "v") or horizontal ("h") wire
@@ -351,9 +379,9 @@
       var y = RY + j * RH;
       if (r === null) { txt(AX + (VW + TW + DW) / 2, y + 22, "⋮", "mid t-big t-grey"); txt(DCX + DCW + 30, y + 22, "⋮", "mid t-grey"); return; }
       var R = row(r), isSel = r === sel, lit = isSel && st >= 1;
-      if (lit) { el(top, "rect", { x: AX, y: y, width: VW + TW + DW, height: RH, "class": "rowhl" }); selY = y; }
+      if (lit) { el(top, "rect", { x: AX, y: y, width: VW + TW + DW, height: RH, "class": "rowhl", fill: stepColor(1) }); selY = y; }
       if (isSel && S.look && S.look.filledNow && st >= 5) el(top, "rect", { x: AX, y: y, width: VW + TW + DW, height: RH, "class": "rowfill", opacity: .7 });
-      wire([[DCX + DCW, y + RH / 2], [AX, y + RH / 2]], lit ? "addr" : "pending", lit, lit);
+      wire([[DCX + DCW, y + RH / 2], [AX, y + RH / 2]], lit ? "addr" : "pending", lit, lit, 1);
       txt(DCX + DCW + 6, y + RH / 2 - 4, (F.ix <= 10 ? bin(r, F.ix) : String(r)), "t-tiny mono t-addr");
       el(top, "rect", { x: AX, y: y, width: VW, height: RH, "class": "cellr", "fill-opacity": 0 });
       el(top, "rect", { x: AX + VW, y: y, width: TW, height: RH, "class": "cellr", "fill-opacity": 0 });
@@ -372,29 +400,30 @@
 
     // ----- index wire -> decoder -----
     var on1 = L && st >= 1;
-    wire([[seg.ix.cx, BY + BH], [seg.ix.cx, 128], [DCX + DCW / 2, 128], [DCX + DCW / 2, RY - 4]], "addr", on1);
+    wire([[seg.ix.cx, BY + BH], [seg.ix.cx, 128], [DCX + DCW / 2, 128], [DCX + DCW / 2, RY - 4]], "addr", on1, false, 1);
     width(DCX + DCW / 2, 160, F.ix, "v", "t-addr");
 
     // ----- tag path -----
     var CX = AX + VW + TW / 2, CY = AB + 70, LANE = 172, on2 = L && st >= 2;
-    wire([[seg.tag.cx, BY + BH], [seg.tag.cx, 108], [LANE, 108], [LANE, CY], [CX - 20, CY]], "addr", on2);
+    wire([[seg.tag.cx, BY + BH], [seg.tag.cx, 108], [LANE, 108], [LANE, CY], [CX - 20, CY]], "addr", on2, false, 2);
     width(LANE, 150, F.tag, "v", "t-addr");
-    wire([[CX, AB], [CX, CY - 20]], "ink", on2);
+    wire([[CX, AB], [CX, CY - 20]], "ink", on2, false, 2);
     width(CX, AB + 22, F.tag, "v");
     var match = L ? (S.look.rowBefore.tag === L.tag) : false;
     el(top, "circle", { cx: CX, cy: CY, r: 20, "class": "gate ink" + (on2 ? (match ? " lit" : " lit bad") : "") });
     txt(CX, CY + 7, "=", "mid t-big");
-    if (on2) txt(CX + 28, CY - 14, match ? "tags match" : "tags differ", "t-small t-b " + (match ? "t-we" : "t-dout"));
+    if (on2) txt(CX + 28, CY - 14, match ? "tags match" : "tags differ", "t-small t-b " + (match ? "t-we" : "t-miss"));
 
     // ----- valid + AND -> Hit -----
     var VX = AX + VW / 2, GX = CX + 60, GY = CY + 62, on3 = L && st >= 3, hit = isHit();
-    wire([[CX, CY + 20], [CX, GY - 10], [GX, GY - 10]], "we", on3);
-    wire([[VX, AB], [VX, GY + 10], [GX, GY + 10]], "we", on3);
+    var vNow = L ? S.look.rowBefore.valid : false;
+    wire([[CX, CY + 20], [CX, GY - 10], [GX, GY - 10]], on3 ? (match ? "we" : "miss") : "ink", on3, false, 3);
+    wire([[VX, AB], [VX, GY + 10], [GX, GY + 10]], on3 ? (vNow ? "we" : "miss") : "ink", on3, false, 3);
     txt(VX + 6, AB + 34, "valid", "t-tiny t-grey");
     el(top, "path", { d: "M" + GX + "," + (GY - 20) + " H" + (GX + 22) + " A20,20 0 0 1 " + (GX + 22) + "," + (GY + 20) + " H" + GX + " Z",
-      "class": "gate we" + (on3 ? " lit" : "") });
-    wire([[GX + 42, GY], [GX + 100, GY]], "we", on3, on3);
-    txt(GX + 108, GY + 6, "Hit" + (on3 ? " = " + (hit ? 1 : 0) : ""), "t-big t-we");
+      "class": "gate " + (on3 ? (hit ? "we" : "miss") + " lit" : "ink") });
+    wire([[GX + 42, GY], [GX + 100, GY]], on3 ? (hit ? "we" : "miss") : "ink", on3, on3, 3);
+    txt(GX + 108, GY + 6, "Hit" + (on3 ? " = " + (hit ? 1 : 0) : ""), "t-big " + (on3 ? (hit ? "t-we" : "t-miss") : ""));
 
     // ----- data path / mux -----
     var on4 = L && st >= 2, MY = AB + 66, MH = 44, OUTX, outY, SXL = null;
@@ -402,7 +431,7 @@
       var mL = DX + 10, mR = DX + DW - 10;
       for (var k = 0; k < c.block; k++) {
         var wx = DX + cw * k + cw / 2, pick = L && k === L.wo;
-        wire([[wx, AB], [wx, MY]], "dout", on4 && pick);
+        wire([[wx, AB], [wx, MY]], "dout", on4 && pick, false, 2);
         if (k === 0) width(wx, AB + 22, F.wbits, "v", "t-dout");
       }
       el(top, "path", { d: "M" + mL + "," + MY + " L" + mR + "," + MY + " L" + (mR - 30) + "," + (MY + MH) + " L" + (mL + 30) + "," + (MY + MH) + " Z",
@@ -411,7 +440,7 @@
       txt((mL + mR) / 2, MY + 36, c.block + "-to-1, " + F.wbits + " bits wide", "mid t-tiny t-dout");
       // word offset select
       SXL = Math.max(mR + 60, seg.wo.cx);
-      wire([[seg.wo.cx, BY + BH], [seg.wo.cx, 118], [SXL, 118], [SXL, MY + MH / 2], [mR - 15, MY + MH / 2]], "addr", on4);
+      wire([[seg.wo.cx, BY + BH], [seg.wo.cx, 118], [SXL, 118], [SXL, MY + MH / 2], [mR - 15, MY + MH / 2]], "addr", on4, false, 2);
       width(SXL, MY - 24, F.wo, "v", "t-addr");
       txt(SXL + 8, MY + MH / 2 + 18, "select = word offset", "t-tiny t-addr");
       OUTX = (mL + mR) / 2; outY = MY + MH;
@@ -421,12 +450,13 @@
     } else {
       OUTX = DX + DW / 2; outY = AB;
     }
-    wire([[OUTX, outY], [OUTX, outY + 40]], "dout", on4, on4);
+    wire([[OUTX, outY], [OUTX, outY + 40]], "dout", on4, on4, st >= 4 ? 4 : 2);
     width(OUTX, outY + 14, F.wbits, "v", "t-dout");
     var dataTxt = "Data";
-    if (on4 && L) dataTxt += " = " + wordStr(S.look.rowBefore.words[L.wo]) + (hit || st < 4 ? "" : "  (miss: not a copy of this address)");
+    if (on4 && L) dataTxt += " = " + wordStr(S.look.rowBefore.words[L.wo]);
     // label sits to the right of the end of the data wire, clear of the comparator / Hit labels
     txt(OUTX + 10, outY + 44, dataTxt, "t-b t-dout mono");
+    if (on4 && L && !hit && st >= 4) txt(OUTX + 10, outY + 62, "miss: not a copy of this address, ignored", "t-small t-b t-miss");
 
     // ----- byte offset -----
     if (F.bo) {
@@ -458,10 +488,10 @@
         (!R.valid ? " (A slot with valid = 0 holds leftover bits, not a real copy.)" : "");
       case 4: return hit
         ? "Hit = 1, so the data that already came out" + (c.block > 1 ? " of the mux" : "") + " is the right data, and the CPU uses it. Reading the data in parallel with the tag check is what makes a hit fast."
-        : "Hit = 0, so the data that came out" + (c.block > 1 ? " of the mux" : "") + " is thrown away: it is not a copy of this address. The block has to come from RAM.";
+        : "Hit = 0, so the data that came out" + (c.block > 1 ? " of the mux" : "") + " is thrown away: it is not a copy of this address. " + unitPhrase(c).charAt(0).toUpperCase() + unitPhrase(c).slice(1) + " has to come from RAM.";
       case 5:
         if (hit) return "<b>Hit.</b> The CPU gets " + wordStr(R.words[L.wo]) + " from the cache, without going to RAM.";
-        return "<b>Miss.</b> The block containing this address is copied from RAM into slot " + ixS + ", with tag " + tagS + " and valid = 1" +
+        return "<b>Miss.</b> " + unitPhrase(c).charAt(0).toUpperCase() + unitPhrase(c).slice(1) + " is copied from RAM into slot " + ixS + ", with tag " + tagS + " and valid = 1" +
           (L.filledNow ? " (done: the slot is shaded green). Look up the same address again to see a hit." : ". (Filling is turned off, so the slot is left as it was.)") +
           (R.valid && R.tag !== L.tag ? " The copy that was there before is evicted." : "");
     }
@@ -513,13 +543,49 @@
   }
 
   // ---------- rendering + control ----------
+  // ---------- RAM panel ----------
+  function ramText(a) {
+    var c = S.cfg, bytes = [];
+    if (c.byteAddr) return c.word === 1 ? bin(ramByte(a), 8) : "0x" + hexb(ramByte(a));
+    for (var b = 0; b < c.word; b++) bytes.push(ramByte(a * c.word + b));
+    return wordStr(bytes);
+  }
+  function renderRam() {
+    var c = S.cfg, F = fields(c), box = document.getElementById("ram"), L = S.look, st = S.stage;
+    if (F.tag < 1) { box.innerHTML = ""; return; }
+    var per = (c.byteAddr ? c.word : 1) * c.block;   // addresses in one cache slot's worth of data
+    var base = L ? compose(L.tag, L.idx, 0, 0, F) : 0, N = pow2(c.A), lo, hi;
+    if (c.A <= 8) { lo = 0; hi = N - 1; }
+    else { lo = Math.max(0, base - 2); hi = Math.min(N - 1, base + per + 1); }
+    var copied = L && st >= 5 && L.filledNow, note = "";
+    if (L && st >= 5) note = isHit() ? "Hit: RAM is not used." : (copied ? "Miss: the green " + (per > 1 ? "rows were" : "row was") + " copied into slot " + bin(L.idx, F.ix) + "." : "Miss: filling is turned off.");
+    else if (L) note = "Purple: the address being looked up." + (per > 1 ? " Grey: the rest of its " + unit(c) + "." : "");
+    var h = '<h2>RAM <span>(made-up contents)</span></h2><div class="note">' + note + '</div><table>';
+    if (lo > 0) h += '<tr class="gap"><td colspan="2">⋮</td></tr>';
+    for (var a = lo; a <= hi; a++) {
+      var cls = [];
+      if (L && a === L.v) cls.push("look");
+      if (L && per > 1 && a >= base && a < base + per) cls.push("blk");
+      if (copied && a >= base && a < base + per) cls.push("copied");
+      h += '<tr id="ram-' + a + '" class="' + cls.join(" ") + '"><td>' + fmtAddr(a, c.A) + '</td><td class="d">' + ramText(a) + '</td></tr>';
+    }
+    if (hi < N - 1) h += '<tr class="gap"><td colspan="2">⋮</td></tr>';
+    box.innerHTML = h + "</table>";
+    var r = L && document.getElementById("ram-" + L.v);
+    if (r) box.scrollTop = Math.max(0, r.offsetTop - box.clientHeight / 2);
+  }
+
   function render() {
     draw();
+    renderRam();
     document.getElementById("explain").innerHTML = explain();
     var tr = document.getElementById("tracker"); tr.innerHTML = "";
     steps().forEach(function (s, i) {
       var li = document.createElement("li"); li.textContent = (i + 1) + ". " + s;
-      if (S.look) { if (i < S.stage) li.className = "done"; else if (i === S.stage) li.className = "now"; }
+      if (S.look) {
+        if (i < S.stage) { li.className = "done"; li.style.background = stepColor(i); li.style.opacity = .75; }
+        else if (i === S.stage) { li.className = "now"; li.style.background = stepColor(i); }
+      }
       tr.appendChild(li);
     });
     document.getElementById("back").disabled = !S.look || S.stage <= 0;
@@ -560,6 +626,7 @@
     var inp = document.getElementById("in-addr");
     if (F.tag >= 1) inp.value = fmtAddr(compose(row(0).tag, 0, 0, 0, F), S.cfg.A);
     inp.classList.remove("bad"); document.getElementById("msg-addr").textContent = "";
+    document.getElementById("fill-lab").textContent = "Fill the slot on a miss (copy the " + unit(S.cfg) + " from RAM)";
     summary(); tryButtons(); render();
   }
   function setTab(t) {
@@ -590,6 +657,7 @@
 
   var h = (location.hash || "").replace("#", "");
   setTab(/^conf/.test(h) ? "config" : "simple");
+  var am = h.match(/addr=(0x[0-9a-f]+|[0-9]+)/i); if (am) document.getElementById("in-addr").value = am[1];   // e.g. #lookup-stage5-addr=010110
   if (/lookup/.test(h)) { doLookup(); var m = h.match(/stage(\d)/); if (m) for (var i = 0; i < +m[1]; i++) setStage(S.stage + 1); }
 })();
 </script>
