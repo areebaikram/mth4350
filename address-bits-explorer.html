@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Address Bits Explorer</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f4f3f7; --card: #ffffff; --ink: #1a1a1a; --muted: #5a5a66;
+    --line: #8a8a96; --faint: #d4d4dc; --hl: #ffd84d; --hl-ink: #1a1a1a; --warn: #9a4b00; --warn-bg: #fff3df;
+    /* field colors (colorblind-friendly set: purple / green / orange / blue) */
+    --tag: #7d28a0;  --tag-soft: #f0e3f6;
+    --idx: #11804a;  --idx-soft: #ddf2e6;
+    --wib: #b35c00;  --wib-soft: #fde9d2;
+    --byte: #1464d2; --byte-soft: #e1ecfb;
+    --on-field: #ffffff;
+    --ts: 75%; --tl: 84%;          /* per-slot tint: saturation / lightness */
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+      --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d; --hl-ink: #15151a; --warn: #ffbf73; --warn-bg: #3a2a12;
+      --tag: #d29cf0;  --tag-soft: #3a2546;
+      --idx: #5fd39a;  --idx-soft: #17392a;
+      --wib: #ffb35c;  --wib-soft: #45300f;
+      --byte: #85b6ff; --byte-soft: #1c2e4d;
+      --on-field: #15151a;
+      --ts: 40%; --tl: 30%;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+    --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d; --hl-ink: #15151a; --warn: #ffbf73; --warn-bg: #3a2a12;
+    --tag: #d29cf0;  --tag-soft: #3a2546;
+    --idx: #5fd39a;  --idx-soft: #17392a;
+    --wib: #ffb35c;  --wib-soft: #45300f;
+    --byte: #85b6ff; --byte-soft: #1c2e4d;
+    --on-field: #15151a;
+    --ts: 40%; --tl: 30%;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; background: var(--bg); }
+  body {
+    margin: 0; padding: 12px 16px 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px; line-height: 1.4; overflow-x: hidden;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 0 0 2px; }
+  h2 { font-size: .95rem; margin: 0 0 6px; }
+  .intro { margin: 0 0 10px; color: var(--muted); font-size: .95rem; }
+  .mono { font-family: var(--mono); }
+  .t { color: var(--tag); } .i { color: var(--idx); } .w { color: var(--wib); } .b { color: var(--byte); }
+  .panel { background: var(--panel); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+
+  /* ---------- controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: flex-start; }
+  .ctl { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ctl label { font-weight: 600; font-size: .82rem; color: var(--muted); }
+  select, input[type=text], .btn {
+    font: inherit; min-height: 40px; padding: 5px 9px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  }
+  input[type=text] { font-family: var(--mono); letter-spacing: .06em; min-width: 0; }
+  input.bad { border-color: var(--warn); background: var(--warn-bg); }
+  .addrrow { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .btn { cursor: pointer; min-width: 40px; font-weight: 700; }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .ten { font-size: .9rem; color: var(--muted); white-space: nowrap; padding-left: 2px; }
+  .ten b { color: var(--ink); font-family: var(--mono); }
+  :focus-visible { outline: 3px solid #f0a020; outline-offset: 2px; }
+  .hint { font-size: .78rem; color: var(--muted); }
+  .hint.warn { color: var(--warn); font-weight: 600; }
+  .problem { background: var(--warn-bg); color: var(--warn); border: 2px solid var(--warn); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; font-weight: 600; }
+
+  /* ---------- zoom bar ---------- */
+  .zoombar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
+  .zoombar .zl { font-size: .82rem; font-weight: 600; color: var(--muted); margin-right: 2px; }
+  .zbtn { font: inherit; font-size: .88rem; padding: 6px 11px; min-height: 36px; border-radius: 18px; border: 1px solid var(--line);
+          background: var(--card); color: var(--ink); cursor: pointer; }
+  .zbtn[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+  .zarrow { border-radius: 50%; min-width: 36px; padding: 0; font-weight: 700; }
+  .zarrow:disabled { opacity: .3; cursor: default; }
+
+  /* ---------- address bit boxes ---------- */
+  .bits { --bw: min(44px, calc((100vw - 64px) / var(--A) - 4px));
+          display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: flex-start; }
+  .grp { display: flex; flex-direction: column; align-items: center; transition: opacity .35s, filter .35s; }
+  .grp .boxes { display: flex; gap: 3px; }
+  .bit { width: var(--bw); height: calc(var(--bw) * 1.12); display: flex; align-items: center; justify-content: center;
+         font-family: var(--mono); font-size: calc(var(--bw) * .6); font-weight: 700; border-radius: 6px;
+         background: var(--c); color: var(--on-field); transition: transform .35s; }
+  .grp.lit .bit { transform: translateY(-2px); box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+  .grp.off { opacity: .22; filter: grayscale(1); }
+  .glab { text-align: center; font-size: .8rem; line-height: 1.15; margin-top: 4px; max-width: 9em; }
+  .glab b { color: var(--c); display: block; }
+  .glab span { font-family: var(--mono); font-size: .85rem; white-space: nowrap; }
+  .glab i { font-style: normal; }
+  .zeros { font-size: .78rem; color: var(--muted); align-self: center; max-width: 16em; }
+  .caption { font-size: 1rem; margin: 8px 0 8px; min-height: 1.4em; font-weight: 500; }
+  .caption .mono { font-weight: 700; }
+
+  /* ---------- stage: focus view + cache ---------- */
+  .stage { display: flex; gap: 14px 18px; align-items: flex-start; }
+  .focus { flex: 0 1 auto; min-width: min(540px, 100%); }
+  .focus .note { width: 0; min-width: 100%; }
+  .cache { flex: 0 0 250px; font-size: .88rem; transition: opacity .35s; }
+  .cache.dimmed { opacity: .35; }
+  @media (max-width: 760px) { .stage { flex-direction: column; } .cache { flex: none; width: 100%; } .focus { width: 100%; } }
+  .note { font-size: .8rem; color: var(--muted); margin: 6px 0 0; }
+
+  .slide { transform-origin: 50% 0; }
+  .slide.zin  { animation: zin .42s ease-out; }
+  .slide.zout { animation: zout .42s ease-out; }
+  @keyframes zin  { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
+  @keyframes zout { from { opacity: 0; transform: scale(1.1); } to { opacity: 1; transform: none; } }
+
+  /* RAM table */
+  .tablewrap { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  table.ram { border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
+  .ram th, .ram td { white-space: nowrap; }
+  .ram thead th { font-size: 12px; font-weight: 700; padding: 2px 6px; text-align: center; }
+  .ram thead tr.bytehead th { border-bottom: 2px solid var(--line); }
+  .ram thead th.wh { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-weight: 600; color: var(--muted); }
+  .ram thead th.lh { text-align: right; padding-right: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .ram thead th.sh { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--muted); font-weight: 600; }
+  .ram thead .nob { color: var(--muted); font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .ram .k1 { position: sticky; left: 0; z-index: 2; background: var(--bg); }
+  .ram tbody tr { height: 26px; transition: opacity .35s; }
+  .ram td.rl { text-align: right; padding: 0 8px 0 4px; font-weight: 700; }
+  .ram .sc, .ram .sch { display: inline-block; min-width: 30px; margin-left: 6px; text-align: center; vertical-align: middle; }
+  .ram .sc { font-size: 11px; font-weight: 700; line-height: 20px; border-radius: 4px; color: var(--ink);
+             background: hsl(var(--h) var(--ts) var(--tl)); border-left: 4px solid hsl(var(--h) 70% 50%); }
+  .ram .sch { color: var(--muted); font-weight: 600; }
+  .ram td.cell { padding: 0 7px; border: 1px solid var(--faint); background: var(--card); cursor: pointer; font-weight: 600; text-align: center; }
+  .ram .ws { border-left: 3px solid var(--line) !important; }
+  .ram tbody tr:not(.gap) td.cell:last-child { border-right: 2px solid var(--line); }
+  .ram tr.selrow td.cell { background: var(--wib-soft); }
+  .ram tr.selrow td.rl .lab { text-decoration: underline 3px var(--hl); text-underline-offset: 4px; }
+  .ram tr td.cell.inword { background: var(--byte-soft); }
+  .ram tr td.cell.sel { background: var(--hl); color: var(--hl-ink); outline: 3px solid var(--ink); outline-offset: -3px; }
+  .ram tr td.cell.sel span { color: inherit; }
+  .ram td.cell:hover { outline: 2px solid var(--line); outline-offset: -2px; }
+  .ram tr.dim { opacity: .2; }
+  .ram tr.gap .gt { position: sticky; left: 0; display: inline-block; padding-left: 40px; }
+  .ram tr.gap td { text-align: left; color: var(--muted); font-size: 12px; height: 22px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+
+  /* block / word / byte focus views */
+  .ctx { font-size: .9rem; margin: 0 0 8px; color: var(--muted); }
+  .ctx .mono { font-weight: 700; }
+  .words { display: flex; flex-wrap: wrap; gap: 14px; }
+  .wordbox { border: 2px solid var(--line); border-radius: 10px; padding: 6px; background: var(--card); transition: opacity .35s; }
+  .wordbox.selword { border-color: var(--byte); background: var(--byte-soft); }
+  .wh2 { font-size: .85rem; font-weight: 600; text-align: center; margin-bottom: 4px; color: var(--muted); }
+  .wh2 .mono { font-weight: 700; }
+  .bytes { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bcell { font: inherit; color: var(--ink); display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+           border: 1px solid var(--faint); border-radius: 8px; background: var(--bg); padding: 6px 10px; }
+  .bcell .bh { font-family: var(--mono); font-size: .8rem; font-weight: 700; }
+  .bcell .bh .nob { color: var(--muted); font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .bcell .ba { font-family: var(--mono); font-weight: 700; white-space: nowrap; font-size: clamp(14px, 2.2vw, 20px); }
+  .bcell.sel { background: var(--hl); color: var(--hl-ink); outline: 3px solid var(--ink); outline-offset: -3px; }
+  .bcell.sel span { color: inherit !important; }
+  .lv-block .bcell .ba .t, .lv-block .bcell .ba .i, .lv-word .bcell .ba .t, .lv-word .bcell .ba .i, .lv-word .bcell .ba .w { opacity: .4; }
+  .wordview .bcell { padding: 10px 16px; }
+  .wordview .bcell .bh { font-size: 1rem; }
+  .wordview .bcell .ba { font-size: clamp(18px, 3.4vw, 30px); }
+  .byteview { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .bigbyte { border: 3px solid var(--ink); background: var(--hl); color: var(--hl-ink); border-radius: 14px; padding: 18px 26px; }
+  .bigbyte .ba { font-family: var(--mono); font-weight: 800; font-size: clamp(26px, 7vw, 54px); white-space: nowrap; letter-spacing: .04em; }
+  .bigbyte .sub { font-size: .95rem; }
+  .memline { font-size: 1.15rem; }
+  .memline .mono { font-weight: 700; }
+
+  /* cache panel */
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .chip { font-family: var(--mono); font-size: 11px; font-weight: 700; min-width: 26px; padding: 3px 4px; text-align: center; border-radius: 5px;
+          background: hsl(var(--h) var(--ts) var(--tl)); border-left: 3px solid hsl(var(--h) 70% 50%); }
+  .chip.sel { outline: 3px solid var(--ink); outline-offset: 1px; }
+  .slotcard { border: 3px solid var(--idx); background: var(--idx-soft); border-radius: 8px; padding: 7px 10px; line-height: 1.45; }
+  .slotcard .mono { font-weight: 700; }
+  .slotcard .copies { font-family: var(--mono); font-size: .82rem; overflow-wrap: anywhere; }
+
+  /* details */
+  details { margin-top: 12px; }
+  summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+  .fieldlist { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+  .fieldlist li { border-left: 5px solid var(--c); background: var(--card); padding: 6px 10px; border-radius: 0 8px 8px 0; font-size: .92rem; }
+  .fieldlist li.zero { opacity: .75; border-left-style: dashed; }
+  .fieldlist b { color: var(--c); }
+  .formula { font-family: var(--mono); font-size: .88rem; display: grid; gap: 4px; }
+  .formula div { overflow-wrap: anywhere; }
+  .formula span { font-weight: 700; }
+
+  @media (max-width: 480px) {
+    body { padding: 10px 16px 20px; }
+    .bits { gap: 6px 8px; }
+    .glab { font-size: .7rem; max-width: 5.2em; }
+    .glab span { font-size: .72rem; }
+    .glab .lbin { display: none; }
+    .zbtn { font-size: .8rem; padding: 5px 9px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Address Bits Explorer</h1>
+  <p class="intro">Suppose memory is byte addressable: every byte has its own address, a string of bits. An address only names a location; <span class="mono">mem[a]</span> means the data stored at address <span class="mono">a</span>.</p>
+
+  <div class="panel controls" id="controls">
+    <div class="ctl"><label for="selA">Suppose addresses have</label>
+      <select id="selA"><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></div>
+    <div class="ctl"><label for="selW">Suppose each word is</label>
+      <select id="selW"><option value="1" selected>1 byte</option><option value="2">2 bytes</option><option value="4">4 bytes</option><option value="8">8 bytes</option></select></div>
+    <div class="ctl"><label for="selB">Suppose each block is</label>
+      <select id="selB"><option value="1" selected>1 word</option><option value="2">2 words</option><option value="4">4 words</option><option value="8">8 words</option></select></div>
+    <div class="ctl"><label for="selS">Suppose the cache has</label>
+      <select id="selS"><option value="1">1 slot</option><option value="2">2 slots</option><option value="4" selected>4 slots</option><option value="8">8 slots</option><option value="16">16 slots</option><option value="32">32 slots</option></select></div>
+    <div class="ctl"><label for="addr">The address (binary)</label>
+      <div class="addrrow">
+        <button class="btn" id="dec" aria-label="previous address" title="previous address">&uarr;</button>
+        <input type="text" id="addr" inputmode="numeric" autocomplete="off" spellcheck="false" value="011110">
+        <button class="btn" id="inc" aria-label="next address" title="next address">&darr;</button>
+        <span class="ten" id="ten"></span>
+      </div>
+      <div class="hint" id="addrhint">&uarr; previous address &middot; &darr; next address &middot; or tap a byte</div></div>
+  </div>
+
+  <div id="problem" class="problem" hidden></div>
+
+  <div id="main">
+    <div class="zoombar" id="zoombar" role="group" aria-label="zoom level"></div>
+    <div class="bits" id="bits"></div>
+    <p class="caption" id="caption" aria-live="polite"></p>
+    <div class="stage">
+      <div class="focus"><div class="slide" id="slide"></div></div>
+      <div class="cache" id="cache"></div>
+    </div>
+  </div>
+
+  <details class="panel" id="why">
+    <summary>Why these sizes?</summary>
+    <ul class="fieldlist" id="fieldlist"></ul>
+    <div class="formula" id="formula"></div>
+  </details>
+</div>
+
+<script>
+// BEGIN LOGIC
+function log2(n) { var k = 0; while ((1 << k) < n) k++; return k; }
+function bin(v, n) { if (n <= 0) return ""; var s = v.toString(2); while (s.length < n) s = "0" + s; return s; }
+// Split a byte address of A bits, word size W bytes, block size B words, S cache slots.
+function splitAddress(A, W, B, S, addr) {
+  var byteBits = log2(W), wibBits = log2(B), idxBits = log2(S);
+  var off = byteBits + wibBits, need = off + idxBits;
+  var r = { A: A, W: W, B: B, S: S, addr: addr, byteBits: byteBits, wibBits: wibBits, idxBits: idxBits,
+            offBits: off, need: need, ok: need <= A, bpb: W * B };
+  r.tagBits = r.ok ? A - need : 0;
+  var a = addr;
+  r.byteVal = a & (W - 1);           a = a >>> byteBits;
+  r.wibVal  = a & (B - 1);           a = a >>> wibBits;
+  r.idxVal  = a & (S - 1);           a = a >>> idxBits;
+  r.tagVal  = r.ok ? a : 0;
+  r.byteStr = bin(r.byteVal, byteBits); r.wibStr = bin(r.wibVal, wibBits);
+  r.idxStr = bin(r.idxVal, idxBits);    r.tagStr = bin(r.tagVal, r.tagBits);
+  r.blockNum = addr >>> off;
+  r.blockStart = addr - (addr % r.bpb); r.blockEnd = r.blockStart + r.bpb - 1;
+  r.wordStart = addr - (addr % W);      r.wordEnd = r.wordStart + W - 1;
+  return r;
+}
+// END LOGIC
+
+var $ = function (id) { return document.getElementById(id); };
+var state = { A: 6, W: 1, B: 1, S: 4, addr: 30, zoom: "ram" };
+var LEVELS = [
+  { key: "ram",   name: "Whole RAM",             lit: { tag: 1, idx: 1, wib: 1, byte: 1 } },
+  { key: "slot",  name: "Blocks sharing a slot", lit: { tag: 1, idx: 1 } },
+  { key: "block", name: "One block",             lit: { wib: 1, byte: 1 } },
+  { key: "word",  name: "One word",              lit: { byte: 1 } },
+  { key: "byte",  name: "One byte",              lit: { tag: 1, idx: 1, wib: 1, byte: 1 } }
+];
+var FIELDS = [
+  { key: "tag",  name: "tag",           c: "var(--tag)" },
+  { key: "idx",  name: "index",         c: "var(--idx)" },
+  { key: "wib",  name: "word in block", c: "var(--wib)" },
+  { key: "byte", name: "byte in word",  c: "var(--byte)" }
+];
+
+function plural(n, w) { return n + " " + w + (n === 1 ? "" : "s"); }
+function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+function seg(x, c) { return x ? '<span class="' + c + '">' + x + "</span>" : ""; }
+function mono(x) { return '<span class="mono">' + x + "</span>"; }
+function pow2(k) { return "2<sup>" + k + "</sup>"; }
+function levelIndex(k) { var key = k || state.zoom; for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].key === key) return i; return 0; }
+// an address, colored by field
+function caddr(r, a) {
+  var s = bin(a, r.A), t = r.tagBits, i = r.idxBits, w = r.wibBits;
+  return seg(s.slice(0, t), "t") + seg(s.slice(t, t + i), "i") + seg(s.slice(t + i, t + i + w), "w") + seg(s.slice(t + i + w), "b");
+}
+// the offset part (column header) for byte j of a block
+function offHtml(r, j) {
+  if (!r.offBits) return '<span class="nob">no offset bits</span>';
+  return seg(bin(j >>> r.byteBits, r.wibBits), "w") + seg(bin(j & (r.W - 1), r.byteBits), "b");
+}
+// the row label (tag then index) for block number blk
+function rowHtml(r, blk) {
+  if (!r.tagBits && !r.idxBits) return '<span class="nob">&mdash;</span>';
+  return seg(bin(blk >>> r.idxBits, r.tagBits), "t") + seg(bin(blk & (r.S - 1), r.idxBits), "i");
+}
+function hue(s, S) { return Math.round((s * 360 / S + 140) % 360); }
+
+// ---------------- RAM table (whole RAM / blocks sharing a slot) ----------------
+function rowWindow(r) {
+  var total = (1 << r.A) / r.bpb, sel = r.blockNum;
+  var win = Math.min(total, Math.max(8, Math.min(16, 2 * r.S)));
+  var align = Math.min(r.S, win);
+  var start = Math.floor((sel - Math.floor(win / 2)) / align) * align;
+  if (start < 0) start = 0;
+  while (sel > start + win - 1) start += align;
+  if (start > total - win) start = total - win;
+  return { start: start, end: start + win - 1, total: total };
+}
+function tableItems(r) {
+  var items = [], total = (1 << r.A) / r.bpb, b;
+  function gap(n, txt) { if (n > 0) items.push({ gap: txt || "&#8942; (" + plural(n, "more row") + ")" }); }
+  if (state.zoom === "slot" && r.S >= 4) {
+    var M = total / r.S, K = Math.min(M, 4);
+    var t0 = Math.max(0, Math.min(r.tagVal - 1, M - K));
+    var first = t0 * r.S + r.idxVal, last = (t0 + K - 1) * r.S + r.idxVal;
+    gap(first);
+    for (var t = t0; t < t0 + K; t++) {
+      if (t > t0) gap(r.S - 1, "&#8942; " + plural(r.S - 1, "block") + " with other indexes");
+      items.push({ blk: t * r.S + r.idxVal });
+    }
+    gap(total - 1 - last);
+  } else {
+    var w = rowWindow(r);
+    gap(w.start);
+    for (b = w.start; b <= w.end; b++) items.push({ blk: b, dim: state.zoom === "slot" && (b & (r.S - 1)) !== r.idxVal });
+    gap(total - 1 - w.end);
+  }
+  return items;
+}
+function buildTable(r) {
+  var W = r.W, bpb = r.bpb, ncol = bpb + 1;
+  var h = '<div class="tablewrap" id="tw"><table class="ram"><thead>';
+  if (W > 1 && r.B > 1) {
+    h += '<tr><th class="k1"></th>';
+    for (var w = 0; w < r.B; w++) h += '<th colspan="' + W + '" class="wh' + (w ? " ws" : "") + '">word ' + seg(bin(w, r.wibBits), "w") + "</th>";
+    h += "</tr>";
+  }
+  h += '<tr class="bytehead"><th class="lh k1">' + (r.tagBits ? '<span class="t">tag</span> ' : "") + (r.idxBits ? '<span class="i">index</span>' : "") + '<span class="sch">slot</span></th>';
+  for (var j = 0; j < bpb; j++) h += '<th class="' + (j && j % W === 0 ? "ws" : "") + '">' + offHtml(r, j) + "</th>";
+  h += "</tr></thead><tbody>";
+  tableItems(r).forEach(function (it) {
+    if (it.gap) { h += '<tr class="gap"><td colspan="' + ncol + '"><span class="gt">' + it.gap + "</span></td></tr>"; return; }
+    var blk = it.blk, s = blk & (r.S - 1), selrow = blk === r.blockNum;
+    h += '<tr class="' + (selrow ? "selrow" : "") + (it.dim ? " dim" : "") + '"><td class="rl k1"><span class="lab">' + rowHtml(r, blk) + '</span><span class="sc" style="--h:' + hue(s, r.S) + '" title="slot ' + s + '">' + s + "</span></td>";
+    for (var j = 0; j < bpb; j++) {
+      var a = blk * bpb + j, c = "cell";
+      if (j && j % W === 0) c += " ws";
+      if (a === state.addr) c += " sel"; else if (a >= r.wordStart && a <= r.wordEnd) c += " inword";
+      h += '<td class="' + c + '" data-a="' + a + '">' + caddr(r, a) + "</td>";
+    }
+    h += "</tr>";
+  });
+  h += "</tbody></table></div>";
+  h += '<p class="note">Drawing one block per row is just a way to picture RAM; real RAM is one long list of addresses. ' +
+       "Each byte&rsquo;s address = its row label followed by its column header.</p>";
+  return h;
+}
+
+// ---------------- block / word / byte views ----------------
+function blockCtx(r) {
+  return "block " + mono(rowHtml(r, r.blockNum)) + " (" + (r.tagBits ? "tag " + mono(seg(r.tagStr, "t")) + ", " : "") +
+         (r.idxBits ? "index " + mono(seg(r.idxStr, "i")) + " &rarr; " : "") + "slot " + r.idxVal + ")";
+}
+function byteBtn(r, a, head) {
+  return '<button type="button" class="bcell' + (a === state.addr ? " sel" : "") + '" data-a="' + a + '">' +
+         '<span class="bh">' + head + '</span><span class="ba">' + caddr(r, a) + "</span></button>";
+}
+function buildBlock(r) {
+  var h = '<p class="ctx">' + blockCtx(r) + ": " + plural(r.bpb, "byte") + " = " + plural(r.B, "word") + " &times; " + plural(r.W, "byte") + "</p><div class=\"words\">";
+  for (var w = 0; w < r.B; w++) {
+    var ws = r.blockStart + w * r.W, selw = state.addr >= ws && state.addr < ws + r.W;
+    h += '<div class="wordbox' + (selw ? " selword" : "") + '"><div class="wh2">word ' + (r.wibBits ? mono(seg(bin(w, r.wibBits), "w")) : "(the only one)") + '</div><div class="bytes">';
+    for (var k = 0; k < r.W; k++) h += byteBtn(r, ws + k, offHtml(r, w * r.W + k));
+    h += "</div></div>";
+  }
+  return h + "</div>";
+}
+function buildWord(r) {
+  var h = '<div class="wordview"><p class="ctx">word ' + (r.wibBits ? mono(seg(r.wibStr, "w")) + " " : "") + "of " + blockCtx(r) + ": " + plural(r.W, "byte") + '</p><div class="wordbox selword"><div class="bytes">';
+  for (var k = 0; k < r.W; k++)
+    h += byteBtn(r, r.wordStart + k, "byte " + k + (r.byteBits ? " &middot; " + seg(bin(k, r.byteBits), "b") : ""));
+  return h + "</div></div></div>";
+}
+function buildByte(r) {
+  var a = bin(state.addr, r.A);
+  return '<div class="byteview"><div class="bigbyte"><div class="ba">' + caddr(r, state.addr) + '</div><div class="sub">address ' + mono(a) + " = " + state.addr + " in base ten</div></div>" +
+         '<p class="memline">' + mono("mem[" + a + "]") + " is the data stored here. The address is the location&rsquo;s name, not its contents.</p></div>";
+}
+
+// ---------------- captions ----------------
+function caption(r) {
+  var idx = mono('<span class="i">' + r.idxStr + "</span>");
+  switch (state.zoom) {
+    case "ram":
+      if (r.S === 1) return "Each row is one block (" + plural(r.bpb, "byte") + "). With only 1 slot, every block uses that same slot.";
+      return "Each row is one block (" + plural(r.bpb, "byte") + "). The slot colors repeat every " + plural(r.S, "row") + ", because there are " + plural(r.S, "slot") + ".";
+    case "slot":
+      if (!r.idxBits) return "With only 1 slot, every block competes for it. The tag tells them apart.";
+      if (!r.tagBits) return "Only one block has index " + idx + ", so nothing competes for slot " + r.idxVal + " and no tag is needed.";
+      return "These blocks all have index " + idx + ", so they compete for slot " + r.idxVal + ". The tag tells them apart.";
+    case "block":
+      if (!r.offBits) return "Each block is a single byte, so no bits are needed to pick a byte inside it.";
+      return "Inside one block: the offset bits say which byte. The block has " + r.bpb + " = " + pow2(r.offBits) + " bytes, so it takes " + plural(r.offBits, "bit") + " to number them.";
+    case "word":
+      if (!r.byteBits) return "Each word is a single byte, so no bits are needed to pick a byte inside it.";
+      return "Inside one word: these " + plural(r.byteBits, "bit") + " say which of its " + r.W + " bytes.";
+    default:
+      return "One byte: its full address is " + mono(bin(state.addr, r.A)) + ".";
+  }
+}
+
+// ---------------- cache panel ----------------
+function buildCache(r) {
+  var h = "<h2>Cache: " + plural(r.S, "slot") + "</h2><div class=\"chips\">";
+  for (var s = 0; s < r.S; s++)
+    h += '<span class="chip' + (s === r.idxVal ? " sel" : "") + '" style="--h:' + hue(s, r.S) + '" title="slot ' + s + (r.idxBits ? ", index " + bin(s, r.idxBits) : "") + '">' + s + "</span>";
+  var f = "mem[" + bin(r.blockStart, r.A) + "]", l = "mem[" + bin(r.blockEnd, r.A) + "]";
+  var copies = r.bpb === 1 ? "a copy of " + f : "copies of " + f + (r.bpb > 2 ? " &hellip; " : ", ") + l;
+  h += '</div><div class="slotcard"><b>slot ' + r.idxVal + "</b>" + (r.idxBits ? " (index " + mono('<span class="i">' + r.idxStr + "</span>") + ")" : " (the only slot)") +
+       "<br>tag = " + (r.tagBits ? mono('<span class="t">' + r.tagStr + "</span>") : "nothing (0 bits)") +
+       '<br><span class="copies">' + copies + "</span></div>" +
+       '<p class="note">' + mono("mem[a]") + " means the data stored at address " + mono("a") + ".</p>";
+  return h;
+}
+
+// ---------------- details: why these sizes ----------------
+function buildWhy(r) {
+  var fl = $("fieldlist"), A = r.A; fl.innerHTML = "";
+  function item(key, html, zero) { var f = FIELDS.filter(function (x) { return x.key === key; })[0]; var li = el("li", zero ? "zero" : "", html); li.style.setProperty("--c", f.c); fl.appendChild(li); }
+  item("byte", r.byteBits ? "<b>byte in word (" + plural(r.byteBits, "bit") + "):</b> a word has " + r.W + " = " + pow2(r.byteBits) + " bytes, so " + plural(r.byteBits, "bit") + " number them."
+    : "<b>byte in word (0 bits):</b> each word is a single byte, so there is nothing to choose.", !r.byteBits);
+  item("wib", r.wibBits ? "<b>word in block (" + plural(r.wibBits, "bit") + "):</b> a block has " + r.B + " = " + pow2(r.wibBits) + " words, so " + plural(r.wibBits, "bit") + " number them."
+    : "<b>word in block (0 bits):</b> each block is a single word, so there is nothing to choose.", !r.wibBits);
+  item("idx", r.idxBits ? "<b>index (" + plural(r.idxBits, "bit") + "):</b> the cache has " + r.S + " = " + pow2(r.idxBits) + " slots, so " + plural(r.idxBits, "bit") + " say which slot a block goes to."
+    : "<b>index (0 bits):</b> the cache has only 1 slot, so there is nothing to choose.", !r.idxBits);
+  item("tag", r.tagBits ? "<b>tag (" + plural(r.tagBits, "bit") + "):</b> whatever is left. The slot stores it to remember which of the blocks sharing that slot is there."
+    : "<b>tag (0 bits):</b> index and offset already use the whole address, so only one block maps to each slot.", !r.tagBits);
+  var N = 1 << A, nBlocks = N / r.bpb;
+  $("formula").innerHTML =
+    "<div>bytes per block = word size &times; words per block = " + r.W + " &times; " + r.B + " = " + r.bpb + " = " + pow2(r.offBits) + " &rarr; " + r.offBits + " offset bits (<span class=w>" + r.wibBits + "</span> + <span class=b>" + r.byteBits + "</span>)</div>" +
+    "<div>slots = " + r.S + " = " + pow2(r.idxBits) + " &rarr; <span class=i>" + r.idxBits + " index bits</span></div>" +
+    "<div>tag = the rest = " + A + " &minus; " + r.idxBits + " &minus; " + r.offBits + " = <span class=t>" + r.tagBits + " bits</span></div>" +
+    "<div>RAM: " + pow2(A) + " = " + N + " byte addresses = " + plural(nBlocks, "block") + "; " + plural(nBlocks / r.S, "block") + " share each slot</div>";
+}
+
+// ---------------- render ----------------
+var lastZoom = null;
+function render() {
+  var A = state.A, r = splitAddress(A, state.W, state.B, state.S, state.addr), aStr = bin(state.addr, A);
+  $("dec").disabled = state.addr <= 0;
+  $("inc").disabled = state.addr >= (1 << A) - 1;
+  var inp = $("addr");
+  inp.maxLength = A; inp.style.width = "calc(" + A + "ch + " + (A * 0.06).toFixed(2) + "em + 22px)";
+  if (document.activeElement !== inp) { inp.value = aStr; inp.classList.remove("bad"); resetHint(); }
+  $("ten").innerHTML = "= <b>" + state.addr + "</b> in base ten";
+  syncHash();
+
+  if (!r.ok) {
+    $("problem").hidden = false;
+    $("problem").innerHTML = "These choices don&rsquo;t fit together: picking a byte in a word (" + r.byteBits + " bits), a word in a block (" +
+      r.wibBits + ") and a slot (" + r.idxBits + ") needs " + r.need + " bits, but an address has only " + A +
+      ". Try a smaller word, block, or cache, or longer addresses.";
+    $("main").hidden = true; $("why").hidden = true; lastZoom = null;
+    return;
+  }
+  $("problem").hidden = true; $("main").hidden = false; $("why").hidden = false;
+
+  // zoom bar
+  var li = levelIndex();
+  [].forEach.call($("zoombar").querySelectorAll("[data-z]"), function (b) { b.setAttribute("aria-pressed", b.dataset.z === state.zoom ? "true" : "false"); });
+  $("zout").disabled = li === 0; $("zinb").disabled = li === LEVELS.length - 1;
+
+  // bit boxes
+  var lit = LEVELS[li].lit, bits = $("bits"); bits.innerHTML = ""; bits.style.setProperty("--A", A);
+  var vals = {
+    tag:  [r.tagStr, r.tagBits, r.tagStr],
+    idx:  [r.idxStr, r.idxBits, '<i class="lbin">' + r.idxStr + " </i>&rarr; slot " + r.idxVal],
+    wib:  [r.wibStr, r.wibBits, '<i class="lbin">' + r.wibStr + " </i>&rarr; word " + r.wibVal],
+    byte: [r.byteStr, r.byteBits, '<i class="lbin">' + r.byteStr + " </i>&rarr; byte " + r.byteVal]
+  };
+  var zeros = [];
+  FIELDS.forEach(function (f) {
+    var v = vals[f.key]; if (!v[1]) { zeros.push(f.name); return; }
+    var g = el("div", "grp " + (lit[f.key] ? "lit" : "off")); g.style.setProperty("--c", f.c);
+    var bx = el("div", "boxes");
+    for (var i = 0; i < v[0].length; i++) bx.appendChild(el("div", "bit", v[0][i]));
+    g.appendChild(bx);
+    g.appendChild(el("div", "glab", "<b>" + f.name + "</b><span>" + v[2] + "</span>"));
+    bits.appendChild(g);
+  });
+  if (zeros.length) bits.appendChild(el("div", "zeros", "0 bits for: " + zeros.join(", ")));
+
+  $("caption").innerHTML = caption(r);
+
+  // focus view
+  var slide = $("slide"), z = state.zoom;
+  slide.classList.remove("lv-ram", "lv-slot", "lv-block", "lv-word", "lv-byte"); slide.classList.add("lv-" + z);
+  slide.innerHTML = z === "ram" || z === "slot" ? buildTable(r) : z === "block" ? buildBlock(r) : z === "word" ? buildWord(r) : buildByte(r);
+  if (lastZoom !== null && lastZoom !== z) {
+    var dir = li > levelIndex(lastZoom) ? "zin" : "zout";
+    slide.classList.remove("zin", "zout"); void slide.offsetWidth; slide.classList.add(dir);
+  }
+  lastZoom = z;
+  var tw = $("tw"), sc = slide.querySelector("td.sel");
+  if (tw && sc) {
+    var left = sc.offsetLeft, right = left + sc.offsetWidth;
+    var stick = tw.querySelector("th.k1").offsetWidth;
+    if (right > tw.scrollLeft + tw.clientWidth || left - stick < tw.scrollLeft) tw.scrollLeft = Math.max(0, left - stick - (tw.clientWidth - stick) / 2 + sc.offsetWidth / 2);
+  }
+
+  var cache = $("cache"); cache.innerHTML = buildCache(r);
+  cache.classList.toggle("dimmed", z !== "ram" && z !== "slot");
+  buildWhy(r);
+}
+
+// ---------------- URL hash: #a=6&w=4&b=2&s=4&addr=011110&zoom=block ----------------
+function syncHash() {
+  var h = "#a=" + state.A + "&w=" + state.W + "&b=" + state.B + "&s=" + state.S + "&addr=" + bin(state.addr, state.A) + "&zoom=" + state.zoom;
+  try { if (location.hash !== h) history.replaceState(null, "", h); } catch (e) {}
+}
+function readHash() {
+  var q = {}; location.hash.replace(/^#/, "").split("&").forEach(function (p) { var kv = p.split("="); if (kv[0]) q[kv[0]] = decodeURIComponent(kv[1] || ""); });
+  function pick(v, allowed, d) { v = +v; return allowed.indexOf(v) >= 0 ? v : d; }
+  state.A = pick(q.a, [4, 5, 6, 7, 8, 9, 10, 11, 12], state.A);
+  state.W = pick(q.w, [1, 2, 4, 8], state.W);
+  state.B = pick(q.b, [1, 2, 4, 8], state.B);
+  state.S = pick(q.s, [1, 2, 4, 8, 16, 32], state.S);
+  if (q.addr && /^[01]+$/.test(q.addr)) state.addr = parseInt(q.addr, 2);
+  state.addr &= (1 << state.A) - 1;
+  if (LEVELS.some(function (l) { return l.key === q.zoom; })) state.zoom = q.zoom;
+  $("selA").value = state.A; $("selW").value = state.W; $("selB").value = state.B; $("selS").value = state.S;
+}
+
+// ---------------- events ----------------
+function resetHint() { var h = $("addrhint"); h.className = "hint"; h.innerHTML = "&uarr; previous address &middot; &darr; next address &middot; or tap a byte"; }
+function setAddrFromText() {
+  var inp = $("addr"), v = inp.value.replace(/[^01]/g, "");
+  if (v !== inp.value) inp.value = v;
+  if (v.length === state.A) { state.addr = parseInt(v, 2); inp.classList.remove("bad"); resetHint(); render(); }
+  else { inp.classList.add("bad"); $("addrhint").className = "hint warn"; $("addrhint").textContent = "Type exactly " + state.A + " bits (0s and 1s); you have " + v.length + "."; }
+}
+function setZoom(k) { state.zoom = k; render(); }
+function stepZoom(d) { var i = levelIndex() + d; if (i >= 0 && i < LEVELS.length) setZoom(LEVELS[i].key); }
+(function buildZoombar() {
+  var zb = $("zoombar");
+  zb.appendChild(el("span", "zl", "Zoom:"));
+  var o = el("button", "zbtn zarrow", "&lsaquo;"); o.id = "zout"; o.type = "button"; o.setAttribute("aria-label", "zoom out"); o.title = "zoom out"; zb.appendChild(o);
+  LEVELS.forEach(function (l) { var b = el("button", "zbtn", l.name); b.type = "button"; b.dataset.z = l.key; zb.appendChild(b); });
+  var n = el("button", "zbtn zarrow", "&rsaquo;"); n.id = "zinb"; n.type = "button"; n.setAttribute("aria-label", "zoom in"); n.title = "zoom in"; zb.appendChild(n);
+  zb.addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b || b.disabled) return;
+    if (b.dataset.z) setZoom(b.dataset.z); else stepZoom(b.id === "zout" ? -1 : 1);
+  });
+})();
+$("addr").addEventListener("input", setAddrFromText);
+$("addr").addEventListener("blur", function () { render(); });
+$("addr").addEventListener("keydown", function (e) { if (e.key === "Enter") e.target.blur(); });
+$("inc").addEventListener("click", function () { if (state.addr < (1 << state.A) - 1) { state.addr++; render(); } });
+$("dec").addEventListener("click", function () { if (state.addr > 0) { state.addr--; render(); } });
+$("selA").addEventListener("change", function (e) { state.A = +e.target.value; state.addr &= (1 << state.A) - 1; render(); });
+$("selW").addEventListener("change", function (e) { state.W = +e.target.value; render(); });
+$("selB").addEventListener("change", function (e) { state.B = +e.target.value; render(); });
+$("selS").addEventListener("change", function (e) { state.S = +e.target.value; render(); });
+$("slide").addEventListener("click", function (e) { var t = e.target.closest("[data-a]"); if (!t) return; state.addr = +t.dataset.a; render(); });
+document.addEventListener("keydown", function (e) {
+  var tg = e.target.tagName; if (tg === "INPUT" || tg === "SELECT") return;
+  if (e.key === "ArrowRight" || e.key === "PageDown") { stepZoom(1); e.preventDefault(); }
+  else if (e.key === "ArrowLeft" || e.key === "PageUp") { stepZoom(-1); e.preventDefault(); }
+});
+window.addEventListener("hashchange", function () { readHash(); render(); });
+readHash();
+render();
+</script>
+</body>
+</html>

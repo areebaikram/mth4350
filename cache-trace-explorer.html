@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cache Trace Explorer</title>
+<style>
+  :root {
+    --addr: #7d28a0;
+    --din: #1464d2;
+    --dout: #c81e1e;
+    --we: #148240;
+    --ink: #1a1a1a;
+    --pending: #d0d0d0;
+    --bg: #ffffff;
+    --panel: #f6f4f8;
+    --addr-soft: #efe2f5;
+    --din-soft: #e3edfb;
+    --dout-soft: #fbe3e3;
+    --we-soft: #e1f3e8;
+    --hl: #ffd84d;
+    --pair: #e07b00; --pair-soft: #ffe7c2;   /* RAM bytes <-> cache cells being copied */
+    /* address fields: tag = purple, index = green, offset = blue */
+    --tag: var(--addr); --tag-soft: var(--addr-soft);
+    --idx: var(--we);   --idx-soft: var(--we-soft);
+    --off: var(--din);  --off-soft: var(--din-soft);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.45;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  h2 { font-size: 1rem; margin: 0 0 6px; }
+  .sub { color: #555; margin: 0 0 14px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: flex-end;
+    background: var(--panel); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;
+  }
+  .field { display: flex; flex-direction: column; gap: 2px; }
+  .field label { font-weight: 600; font-size: .92em; }
+  .field select, .field input[type=text] {
+    font: inherit; padding: 4px 8px; border-radius: 6px; border: 1px solid #999; background: #fff;
+  }
+  .field input.trace { width: min(560px, 80vw); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+  .field input.bad { border-color: #e08a00; background: #fff6e5; }
+  .field .msg { font-size: .8em; color: #b06000; min-height: 1.1em; }
+  label.chk { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; }
+  .steprow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .btn { border: 1px solid #999; background: #fff; border-radius: 6px; padding: 5px 12px; font: inherit; cursor: pointer; }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #f0a020; outline-offset: 2px; }
+
+  .tracker { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; font-size: .88em; }
+  .tracker li { padding: 3px 9px; border-radius: 12px; background: #eee; color: #777; }
+  .tracker li.done { background: #e6e6e6; color: #333; }
+  .tracker li.now { background: var(--ink); color: #fff; font-weight: 600; }
+  .explain {
+    min-height: 3.2em; background: #fff; border-left: 4px solid var(--dout);
+    padding: 8px 12px; margin-bottom: 10px; border-radius: 0 6px 6px 0; box-shadow: 0 0 0 1px #eee inset;
+  }
+
+  .grid { display: grid; grid-template-columns: 250px minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+  @media (max-width: 980px) { .grid { grid-template-columns: minmax(0, 1fr); } .ram { max-height: 320px; } }
+  .panel { min-width: 0; overflow-x: auto; }
+  .panel { background: #fff; border: 1px solid #e3e0e8; border-radius: 8px; padding: 10px 12px; }
+  .note { font-size: .84em; color: #555; margin: 4px 0 0; }
+
+  /* address breakdown bar */
+  .abar { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 12px; }
+  .abar .labels, .abar .bits { display: flex; }
+  .abar .bits span {
+    width: 38px; height: 40px; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1.25rem; border: 2px solid #bbb; margin-right: -2px; background: #fff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .abar .labels span { font-size: .82em; font-weight: 700; text-align: center; border-bottom: 3px solid; margin-right: 2px; padding-bottom: 1px; }
+  .abar .caption { font-size: .85em; color: #555; }
+  .f-tag { color: var(--tag); border-color: var(--tag) !important; }
+  .f-idx { color: var(--idx); border-color: var(--idx) !important; }
+  .f-off { color: var(--off); border-color: var(--off) !important; }
+  .abar .bits span.f-tag { background: var(--tag-soft); }
+  .abar .bits span.f-idx { background: var(--idx-soft); }
+  .abar .bits span.f-off { background: var(--off-soft); }
+  .abar.empty .bits span { color: #bbb; border-color: #ddd !important; background: #fafafa; }
+
+  /* RAM */
+  .ram { max-height: 560px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; }
+  .ram table { border-collapse: collapse; width: 100%; }
+  .ram td { padding: 1px 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+  .ram td.a { color: #666; text-align: right; white-space: nowrap; border-right: 1px solid #ccc; }
+  .ram td.v { cursor: pointer; }
+  .ram td.v:hover { outline: 1px dashed #999; }
+  .ram td.v input { width: 7.5em; font: inherit; padding: 0 3px; }
+  .ram tr.blk-odd td { background: #f6f4f8; }
+  .ram tr.blk-start td { border-top: 2px solid #b9b2c4; }
+  .ram tr.ask td.a { font-weight: 700; color: var(--ink); }
+  .ram tr.ask td.v { box-shadow: inset 0 0 0 2px var(--dout); }
+  .ram tr.copy td { background: #fff3b8 !important; }
+  .ram .bt { color: var(--tag); } .ram .bi { color: var(--idx); } .ram .bo { color: var(--off); }
+
+  /* cache + trace tables */
+  table.t { border-collapse: collapse; }
+  table.t th, table.t td { border: 1px solid #ccc; padding: 4px 8px; text-align: center; }
+  table.t th { background: #f3f1f6; font-size: .88em; }
+  table.t td { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .cache-wrap { overflow-x: auto; }
+  table.cache td.slot { color: var(--idx); font-weight: 700; }
+  table.cache td.tg { color: var(--tag); }
+  table.cache td.empty { color: #bbb; }
+  table.cache tr.sel td { background: #fff3b8; box-shadow: inset 0 2px 0 var(--hl), inset 0 -2px 0 var(--hl); }
+  table.cache td.cmp { outline: 3px solid var(--tag); outline-offset: -3px; }
+  table.cache td.cmpv { outline: 3px solid var(--ink); outline-offset: -3px; }
+  table.cache td.ret { background: var(--dout-soft) !important; color: var(--dout); font-weight: 700; outline: 3px solid var(--dout); outline-offset: -3px; }
+  table.cache tr.flash td { animation: flash 1s ease-out; }
+  @keyframes flash { 0% { background: #ffe066; } 100% { background: #fff3b8; } }
+  .cmpbox { margin-top: 10px; font-size: .95em; min-height: 1.6em; }
+  .cmpbox .mono { font-weight: 700; }
+  .hit { color: var(--we); font-weight: 700; }
+  .miss { color: var(--dout); font-weight: 700; }
+
+  table.trace { width: 100%; font-size: .9em; }
+  table.trace th, table.trace td { padding: 4px 5px; }
+  table.trace tr.cur td { background: #fff3b8; }
+  table.trace td.tg { color: var(--tag); } table.trace td.ix { color: var(--idx); } table.trace td.of { color: var(--off); }
+  .rate { margin-top: 8px; font-weight: 700; }
+  .hidden { display: none !important; }
+
+  /* v2: connections */
+  .grid { position: relative; }
+  svg.links { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 5; }
+  @media (max-width: 980px) { svg.links { display: none; } }   /* stacked layout: rely on matching colors instead */
+  svg.links path { fill: none; stroke-width: 3; stroke-linecap: round; }
+  svg.links path.copy { stroke: var(--pair); }
+  svg.links path.same { stroke: var(--dout); stroke-width: 2; stroke-dasharray: 6 5; opacity: .75; }
+  .ram tr.pair td { background: var(--pair-soft) !important; }
+  .ram tr.pair td.v { box-shadow: inset 0 0 0 2px var(--pair); font-weight: 700; }
+  .ram tr.ask.pair td.v { box-shadow: inset 0 0 0 2px var(--pair), inset 0 0 0 4px var(--dout); }
+  .ram tr.same td.v { background: var(--dout-soft) !important; box-shadow: inset 0 0 0 2px var(--dout); font-weight: 700; color: var(--dout); }
+  .ram.focus tr:not(.pair):not(.same):not(.ask) td { opacity: .38; }
+  .pn { display: inline-block; min-width: 1.2em; margin-left: 4px; padding: 0 3px; border-radius: 8px; font-size: .72em; line-height: 1.4;
+        background: var(--pair); color: #fff; font-weight: 700; vertical-align: 1px; font-family: -apple-system, Helvetica, Arial, sans-serif; }
+  table.cache td.pair { background: var(--pair-soft) !important; box-shadow: inset 0 0 0 2px var(--pair); font-weight: 700; }
+  table.cache td.ret.pair { box-shadow: inset 0 0 0 2px var(--pair); outline: 3px solid var(--dout); outline-offset: -3px; }
+  table.cache td.newtag { background: var(--pair-soft) !important; box-shadow: inset 0 0 0 2px var(--pair); font-weight: 700; }
+  table.cache td.flip { background: var(--pair-soft) !important; box-shadow: inset 0 0 0 2px var(--pair); font-weight: 700; white-space: nowrap; }
+  table.cache.focus tr:not(.sel):not(:first-child) td { opacity: .4; }
+  .notices { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 8px; min-height: 1.2em; }
+  .notice { font-size: .84em; padding: 2px 10px; border-radius: 12px; background: #fff8e0; border: 1px solid #f0d27a; color: #5a4300; }
+  .notice b { font-weight: 700; }
+  .samelab { font-size: .8em; color: var(--dout); margin-top: 6px; }
+  .samelab:empty, .cmpbox:empty { display: none; }
+  table.trace td.n { color: #888; font-family: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cache Trace Explorer</h1>
+  <p class="sub">A direct-mapped cache in front of a byte-addressable RAM with 6-bit addresses (2<sup>6</sup> = 64 bytes; each byte of data is 8 bits). Reads only. Step through a sequence of addresses and watch hits, misses, and the cache filling up.</p>
+
+  <div class="controls">
+    <div class="field">
+      <label for="slots">Number of slots</label>
+      <select id="slots"><option>4</option><option>8</option><option>16</option></select>
+    </div>
+    <div class="field">
+      <label for="block">Block size</label>
+      <select id="block"><option value="1">1 byte</option><option value="2">2 bytes</option><option value="4">4 bytes</option></select>
+    </div>
+    <label class="chk"><input type="checkbox" id="dec"> Show RAM addresses in base ten</label>
+    <div class="field">
+      <label for="trace">Addresses to read, in order (6-bit binary or base ten)</label>
+      <input type="text" id="trace" class="trace" spellcheck="false" autocomplete="off"
+        value="000100, 000101, 000100, 001000, 000101, 000100, 001101, 000110">
+      <span class="msg" id="msg"></span>
+    </div>
+    <div class="steprow">
+      <button class="btn" id="back">&#9664; Back</button>
+      <button class="btn primary" id="step">Step &#9654;</button>
+      <button class="btn" id="next">Finish this read &#9654;&#9654;</button>
+      <button class="btn" id="all">Run all</button>
+      <button class="btn" id="reset">Reset</button>
+    </div>
+  </div>
+
+  <ol class="tracker" id="tracker"></ol>
+  <div class="explain" id="explain" aria-live="polite"></div>
+
+  <div class="grid" id="grid">
+    <svg class="links" id="links" aria-hidden="true"></svg>
+    <div class="panel">
+      <h2>RAM</h2>
+      <div class="ram" id="ram"></div>
+      <p class="note">Addresses are written beside the locations; they are not stored. Click a value to change it (each value is an 8-bit byte: binary, or hex like <span class="mono">0x2A</span>). Changing RAM resets the trace.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Address the CPU asks for</h2>
+      <div class="abar empty" id="abar"></div>
+      <h2>Cache</h2>
+      <div class="cache-wrap"><table class="t cache" id="cache"></table></div>
+      <div class="cmpbox" id="cmp"></div>
+      <div class="samelab" id="samelab"></div>
+      <div class="notices" id="notices"></div>
+      <p class="note">The cache holds <em>copies</em> of RAM. A slot is picked by its <strong>index</strong>; we never call it an address.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Trace</h2>
+      <table class="t trace" id="tracetab"></table>
+      <div class="rate" id="rate"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var ADDR_BITS = 6, RAM_SIZE = 64;
+
+  // ---------- state ----------
+  var ram = [];
+  for (var a = 0; a < RAM_SIZE; a++) ram.push((a * 37 + 11) & 255);   // deterministic default contents
+
+  var S = { slots: 4, block: 1, seq: [], pos: 0, sub: 0, dec: false };
+  // sub-steps of one read: 0 = not started, 1 split, 2 go to slot, 3 compare, 4 result
+  var STEP_NAMES = ["Split the address", "Go to the slot", "Check valid bit and tag", "Result"];
+
+  function log2(n) { return Math.round(Math.log(n) / Math.LN2); }
+  function bin(v, n) { var s = v.toString(2); while (s.length < n) s = "0" + s; return n === 0 ? "" : s; }
+  function geo() {
+    var off = log2(S.block), idx = log2(S.slots);
+    return { off: off, idx: idx, tag: ADDR_BITS - idx - off };
+  }
+  function split(a) {
+    var g = geo();
+    return {
+      off: a & (S.block - 1),
+      idx: (a >> g.off) & (S.slots - 1),
+      tag: a >> (g.off + g.idx),
+      g: g
+    };
+  }
+
+  // replay the first n reads from an empty cache
+  function simulate(n) {
+    var c = { valid: [], tag: [], data: [], rows: [] };
+    for (var i = 0; i < S.slots; i++) { c.valid.push(0); c.tag.push(0); c.data.push(null); }
+    for (var k = 0; k < n; k++) {
+      var a = S.seq[k], p = split(a);
+      var hit = c.valid[p.idx] === 1 && c.tag[p.idx] === p.tag;
+      var row = { a: a, tag: p.tag, idx: p.idx, off: p.off, hit: hit,
+                  wasValid: c.valid[p.idx], oldTag: c.tag[p.idx] };
+      if (!hit) {
+        var base = a & ~(S.block - 1), blk = [];
+        for (var j = 0; j < S.block; j++) blk.push(ram[base + j]);
+        c.valid[p.idx] = 1; c.tag[p.idx] = p.tag; c.data[p.idx] = blk;
+      }
+      c.rows.push(row);
+    }
+    return c;
+  }
+
+  // ---------- parsing ----------
+  function parseValue(s) {
+    s = s.trim();
+    if (/^[01]{8}$/.test(s)) return parseInt(s, 2);
+    if (/^0x[0-9a-f]{1,2}$/i.test(s)) return parseInt(s.slice(2), 16);
+    if (/^[0-9a-f]{1,2}h$/i.test(s)) return parseInt(s.slice(0, -1), 16);
+    if (/^\d{1,3}$/.test(s) && +s < 256) return +s;
+    return null;
+  }
+  function parseTrace() {
+    var box = document.getElementById("trace"), msg = document.getElementById("msg");
+    var toks = box.value.split(/[\s,;]+/).filter(function (t) { return t.length; });
+    var out = [], bad = [];
+    toks.forEach(function (t) {
+      var v = null;
+      if (/^[01]{6}$/.test(t)) v = parseInt(t, 2);
+      else if (/^0x[0-9a-f]{1,2}$/i.test(t) && parseInt(t.slice(2), 16) < 64) v = parseInt(t.slice(2), 16);
+      else if (/^\d{1,2}$/.test(t) && +t < 64) v = +t;
+      if (v === null) bad.push(t); else out.push(v);
+    });
+    box.classList.toggle("bad", bad.length > 0);
+    msg.textContent = bad.length ? "Skipped (not a 6-bit binary or 0–63 address): " + bad.join(", ") : "";
+    return out;
+  }
+
+  // ---------- rendering helpers ----------
+  function fieldSpans(a, sep) {
+    var g = geo(), s = bin(a, ADDR_BITS), out = "";
+    for (var i = 0; i < ADDR_BITS; i++) {
+      var cls = i < g.tag ? "bt" : (i < g.tag + g.idx ? "bi" : "bo");
+      out += '<span class="' + cls + '">' + s[i] + "</span>";
+    }
+    return out;
+  }
+  function blockRange(a) {
+    var base = a & ~(S.block - 1);
+    return S.block === 1 ? bin(base, ADDR_BITS) : bin(base, ADDR_BITS) + " to " + bin(base + S.block - 1, ADDR_BITS);
+  }
+
+  function renderRAM(askAddr, copyBase, sameAddr) {
+    var g = geo(), html = "<table>";
+    for (var a = 0; a < RAM_SIZE; a++) {
+      var b = Math.floor(a / S.block), cls = [], badge = "";
+      if (S.block > 1) { if (b % 2) cls.push("blk-odd"); if (a % S.block === 0 && a) cls.push("blk-start"); }
+      if (a === askAddr) cls.push("ask");
+      if (copyBase !== null && a >= copyBase && a < copyBase + S.block) {
+        cls.push("pair");
+        if (S.block > 1) badge = '<span class="pn" title="goes to the cache cell with offset ' + bin(a - copyBase, g.off) + '">' + bin(a - copyBase, g.off) + "</span>";
+      }
+      if (a === sameAddr) cls.push("same");
+      html += '<tr id="r' + a + '" class="' + cls.join(" ") + '"><td class="a">' +
+        (S.dec ? a : fieldSpans(a)) + '</td><td class="v" data-a="' + a + '">' + bin(ram[a], 8) + badge + "</td></tr>";
+    }
+    var box = document.getElementById("ram");
+    box.innerHTML = html + "</table>";
+    box.classList.toggle("focus", copyBase !== null || sameAddr !== null);
+    if (askAddr !== null) {
+      // keep the relevant rows (the requested byte, or the whole block being copied) in view
+      var first = document.getElementById("r" + (copyBase !== null ? copyBase : askAddr));
+      var last = document.getElementById("r" + (copyBase !== null ? copyBase + S.block - 1 : askAddr));
+      var mid = (first.offsetTop + last.offsetTop + last.clientHeight) / 2;
+      box.scrollTop = Math.max(0, mid - box.clientHeight / 2);
+    }
+  }
+
+  function renderBar(a) {
+    var g = geo(), el = document.getElementById("abar");
+    var lab = "", bits = "", s = a === null ? "------" : bin(a, ADDR_BITS);
+    function label(cls, name, n) {
+      if (!n) return "";
+      return '<span class="' + cls + '" style="width:' + (n * 36 - 2) + 'px">' + name + " (" + n + ")</span>";
+    }
+    lab = label("f-tag", "tag", g.tag) + label("f-idx", "index", g.idx) + label("f-off", "offset", g.off);
+    for (var i = 0; i < ADDR_BITS; i++) {
+      var cls = i < g.tag ? "f-tag" : (i < g.tag + g.idx ? "f-idx" : "f-off");
+      bits += '<span class="' + cls + '">' + (a === null ? "&middot;" : s[i]) + "</span>";
+    }
+    el.className = "abar" + (a === null || S.sub < 1 ? " empty" : "");
+    el.innerHTML = '<div class="labels">' + lab + '</div><div class="bits">' + bits + "</div>" +
+      '<div class="caption">' + (a === null ? "No read yet." : "Address " + bin(a, ADDR_BITS) + " (base ten " + a + ")") + "</div>";
+  }
+
+  function renderCache(c, cur, sub, flashIdx) {
+    var fill = cur && sub === 4 && !cur.hit;
+    var g = geo(), html = "<tr><th>slot<br>(index)</th><th>valid</th><th>tag</th>";
+    for (var j = 0; j < S.block; j++) html += "<th>data" + (S.block > 1 ? "<br>offset " + bin(j, g.off) : "") + "</th>";
+    html += "</tr>";
+    for (var i = 0; i < S.slots; i++) {
+      var sel = cur && sub >= 2 && cur.idx === i;
+      var rc = (sel ? "sel" : "") + (flashIdx === i ? " flash" : "");
+      html += '<tr class="' + rc + '"><td class="slot">' + bin(i, g.idx) + "</td>";
+      if (sel && fill && !cur.wasValid) html += '<td class="flip">0 &rarr; 1</td>';
+      else html += '<td class="' + (sel && sub === 3 ? "cmpv" : (sel && fill ? "flip" : "")) + '">' + c.valid[i] + "</td>";
+      if (c.valid[i]) html += '<td class="tg' + (sel && sub === 3 ? " cmp" : "") + (sel && fill ? " newtag" : "") + '">' + bin(c.tag[i], g.tag) + "</td>";
+      else html += '<td class="empty' + (sel && sub === 3 ? " cmp" : "") + '">&ndash;</td>';
+      for (var k = 0; k < S.block; k++) {
+        var ret = sel && sub === 4 && k === cur.off;
+        var pc = sel && fill;
+        if (c.valid[i]) html += '<td class="' + (ret ? "ret" : "") + (pc ? " pair" : "") + '">' + bin(c.data[i][k], 8) +
+          (pc && S.block > 1 ? '<span class="pn">' + bin(k, g.off) + "</span>" : "") + "</td>";
+        else html += '<td class="empty">&ndash;</td>';
+      }
+      html += "</tr>";
+    }
+    var tbl = document.getElementById("cache");
+    tbl.innerHTML = html;
+    tbl.classList.toggle("focus", !!(cur && sub >= 2));
+    // remember the selected row so the connector can find it
+    var rows = tbl.querySelectorAll("tr");
+    S.cacheRow = cur && sub >= 2 ? rows[cur.idx + 1] : null;
+  }
+
+  function renderTrace(rows, pos, sub) {
+    var g = geo(), html = "<tr><th>#</th><th>address</th><th>tag</th><th>index</th>" + (S.block > 1 ? "<th>offset</th>" : "") + "<th>result</th></tr>";
+    var hits = 0, done = 0;
+    for (var k = 0; k < S.seq.length; k++) {
+      var show = k < pos || (k === pos && sub >= 1);
+      var r = rows[k], cls = k === pos && sub >= 1 ? "cur" : "";
+      html += '<tr class="' + cls + '"><td class="n">' + (k + 1) + "</td><td>" + bin(S.seq[k], ADDR_BITS) + "</td>";
+      if (show) {
+        html += '<td class="tg">' + bin(r.tag, g.tag) + '</td><td class="ix">' + bin(r.idx, g.idx) + "</td>" +
+          (S.block > 1 ? '<td class="of">' + bin(r.off, g.off) + "</td>" : "");
+        var known = k < pos || sub >= 3;
+        html += "<td>" + (known ? (r.hit ? '<span class="hit">hit</span>' : '<span class="miss">miss</span>') : "") + "</td>";
+      } else {
+        html += "<td></td><td></td>" + (S.block > 1 ? "<td></td>" : "") + "<td></td>";
+      }
+      html += "</tr>";
+      if (k < pos || (k === pos && sub === 4)) { done++; if (r.hit) hits++; }
+    }
+    document.getElementById("tracetab").innerHTML = html;
+    document.getElementById("rate").textContent = done ? "Hit rate so far: " + hits + " / " + done : "Hit rate: (no reads finished yet)";
+  }
+
+  function renderTracker(sub, hit) {
+    var names = STEP_NAMES.slice();
+    if (sub === 4) names[3] = hit ? "Hit: return the copy" : "Miss: copy the block in";
+    var html = "";
+    for (var i = 0; i < 4; i++) {
+      var cls = sub === i + 1 ? "now" : (sub > i + 1 ? "done" : "");
+      html += '<li class="' + cls + '">' + (i + 1) + ". " + names[i] + "</li>";
+    }
+    document.getElementById("tracker").innerHTML = html;
+  }
+
+  // ---------- main render ----------
+  function render(flash) {
+    var n = S.seq.length;
+    var all = simulate(n);
+    var before = simulate(S.pos);
+    var cur = n ? all.rows[S.pos] : null;
+    var showAfter = cur && S.sub === 4;
+    var c = showAfter ? simulate(S.pos + 1) : before;
+    var g = geo();
+    var explain = "", cmp = "", notes = [], samelab = "";
+
+    if (!n) {
+      explain = "Enter some addresses above to start.";
+    } else if (S.sub === 0) {
+      explain = S.pos === 0
+        ? "Press <strong>Step</strong> to start. The cache starts empty: every valid bit is 0."
+        : "Next read: address <span class='mono'>" + bin(cur.a, ADDR_BITS) + "</span>. Press <strong>Step</strong>.";
+    } else {
+      var A = "<span class='mono'>" + bin(cur.a, ADDR_BITS) + "</span>";
+      var T = "<span class='mono f-tag'>" + bin(cur.tag, g.tag) + "</span>";
+      var I = "<span class='mono f-idx'>" + bin(cur.idx, g.idx) + "</span>";
+      var O = g.off ? "<span class='mono f-off'>" + bin(cur.off, g.off) + "</span>" : "";
+      if (S.sub === 1) {
+        explain = "Read " + (S.pos + 1) + " of " + n + ": the CPU asks for the data at address " + A + ". Split its bits: tag " + T + ", index " + I +
+          (g.off ? ", offset " + O + " (which byte inside the block)" : "") +
+          ". With " + S.slots + " slots, the index is " + g.idx + " bits; these wires go straight into the cache's decoder, no arithmetic needed.";
+      } else if (S.sub === 2) {
+        explain = "Go to slot " + I + ". This is the only slot allowed to hold address " + A + ".";
+      } else if (S.sub === 3) {
+        if (!cur.wasValid) notes.push("valid = 0, nothing is here yet.");
+        else if (!cur.hit) notes.push("same slot, different tag, so it's a copy of a different address.");
+        if (!cur.wasValid) {
+          explain = "Slot " + I + " has valid bit 0: it doesn't hold a real copy of anything yet. So this is a <span class='miss'>miss</span>.";
+          cmp = "valid = 0 &rarr; <span class='miss'>miss</span>";
+        } else if (cur.hit) {
+          explain = "Valid bit is 1, and the stored tag matches the address's tag. So this slot holds a copy of address " + A + "'s data: a <span class='hit'>hit</span>.";
+          cmp = "stored tag <span class='mono f-tag'>" + bin(cur.oldTag, g.tag) + "</span> = address tag " + T + " and valid = 1 &rarr; <span class='hit'>hit</span>";
+        } else {
+          explain = "Valid bit is 1, but the stored tag is different: the slot holds a copy of a different address's data. So this is a <span class='miss'>miss</span>.";
+          cmp = "stored tag <span class='mono f-tag'>" + bin(cur.oldTag, g.tag) + "</span> &ne; address tag " + T + " &rarr; <span class='miss'>miss</span>";
+        }
+      } else {
+        var val = "<span class='mono'>" + bin(ram[cur.a], 8) + "</span>";
+        if (cur.hit) {
+          var fillK = -1, prevSame = -1;
+          for (var k = 0; k < S.pos; k++) {
+            if (all.rows[k].idx === cur.idx && !all.rows[k].hit) fillK = k;
+            if (all.rows[k].a === cur.a) prevSame = k;
+          }
+          if (fillK >= 0) notes.push("this was copied in on an earlier miss (read " + (fillK + 1) + ").");
+          if (prevSame >= 0 && prevSame >= fillK) notes.push("used again soon after read " + (prevSame + 1) + ": <b>temporal locality</b>.");
+          else if (fillK >= 0 && all.rows[fillK].a !== cur.a) notes.push("this byte came in with its neighbor's block (read " + (fillK + 1) + "): <b>spatial locality</b>.");
+          samelab = "Same value as RAM address " + bin(cur.a, ADDR_BITS) + ": the cache holds a copy.";
+          explain = "<span class='hit'>Hit.</span> Return the copy from slot " + I + (g.off ? " (the byte at offset " + O + ")" : "") + ": " + val + ". RAM is never touched.";
+        } else {
+          if (cur.wasValid) notes.push("the old copy is replaced. RAM still has the original.");
+          else notes.push("valid flips 0 &rarr; 1: the slot now holds a real copy.");
+          if (S.block > 1) notes.push("matching colors and numbers show which RAM byte goes into which cache cell.");
+          var evict = cur.wasValid
+            ? " This replaces the copy that was there (tag <span class='mono f-tag'>" + bin(cur.oldTag, g.tag) + "</span>); RAM still has the original."
+            : "";
+          explain = "<span class='miss'>Miss.</span> Copy " + (S.block > 1 ? "the whole block, addresses <span class='mono'>" + blockRange(cur.a) + "</span>," : "the data at address " + A) +
+            " from RAM into slot " + I + ", store tag " + T + ", and set the valid bit to 1." + evict +
+            " Then return " + (g.off ? "the byte at offset " + O + ": " : "") + val + ".";
+        }
+      }
+    }
+
+    renderBar(cur && S.sub >= 1 ? cur.a : null);
+    renderCache(c, cur, S.sub, flash && showAfter && !cur.hit ? cur.idx : -1);
+    document.getElementById("cmp").innerHTML = cmp;
+    document.getElementById("samelab").textContent = samelab;
+    document.getElementById("notices").innerHTML = notes.slice(0, 3).map(function (t) {
+      return '<span class="notice"><b>Notice:</b> ' + t + "</span>";
+    }).join("");
+    renderTrace(all.rows, S.pos, S.sub);
+    renderTracker(S.sub, cur && cur.hit);
+    var ask = cur && S.sub >= 1 ? cur.a : null;
+    var copyBase = cur && S.sub === 4 && !cur.hit ? (cur.a & ~(S.block - 1)) : null;
+    var sameAddr = cur && S.sub === 4 && cur.hit ? cur.a : null;
+    renderRAM(ask, copyBase, sameAddr);
+    S.link = copyBase !== null ? { type: "copy", from: copyBase, to: copyBase + S.block - 1 }
+           : sameAddr !== null ? { type: "same", from: sameAddr, to: sameAddr } : null;
+    positionLinks();
+    document.getElementById("explain").innerHTML = explain;
+
+    var last = n - 1;
+    document.getElementById("back").disabled = !n || (S.pos === 0 && S.sub === 0);
+    document.getElementById("step").disabled = !n || (S.pos === last && S.sub === 4);
+    document.getElementById("next").disabled = !n || (S.pos === last && S.sub === 4);
+    document.getElementById("all").disabled = !n || (S.pos === last && S.sub === 4);
+  }
+
+  // ---------- connector from the RAM rows to the cache slot ----------
+  function positionLinks() {
+    var svg = document.getElementById("links"), grid = document.getElementById("grid");
+    svg.innerHTML = "";
+    if (!S.link || !S.cacheRow) return;
+    var G = grid.getBoundingClientRect(), box = document.getElementById("ram").getBoundingClientRect();
+    var r1 = document.getElementById("r" + S.link.from), r2 = document.getElementById("r" + S.link.to);
+    if (!r1 || !r2) return;
+    var a = r1.querySelector("td.v").getBoundingClientRect(), b = r2.querySelector("td.v").getBoundingClientRect();
+    var x1 = a.right, y1 = (a.top + b.bottom) / 2;
+    var clipped = y1 < box.top || y1 > box.bottom;
+    y1 = Math.min(Math.max(y1, box.top + 4), box.bottom - 4);
+    var cells = S.cacheRow.querySelectorAll("td");
+    if (!cells.length) return;
+    // aim at the data cells for a copy, or at the returned cell for a hit
+    // aim at the left edge of the slot's row, so the curve never crosses the table
+    var c0 = cells[0].getBoundingClientRect(), x2 = c0.left, y2 = c0.top + c0.height / 2;
+    x1 -= G.left; y1 -= G.top; x2 -= G.left; y2 -= G.top;
+    var dx = Math.max(40, Math.abs(x2 - x1) / 2);
+    var d = "M" + x1 + "," + y1 + " C" + (x1 + dx) + "," + y1 + " " + (x2 - dx) + "," + y2 + " " + (x2 - 8) + "," + y2;
+    var col = S.link.type === "copy" ? "var(--pair)" : "var(--dout)";
+    svg.innerHTML = '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+      '<path d="M0,0 L10,5 L0,10 z" style="fill:' + col + ';stroke:none"></path></marker></defs>' +
+      '<path class="' + S.link.type + '" d="' + d + '" marker-end="url(#ah)"' + (clipped ? ' stroke-dasharray="4 4"' : "") + "></path>";
+  }
+  document.getElementById("ram").addEventListener("scroll", positionLinks);
+  window.addEventListener("resize", positionLinks);
+
+  // ---------- navigation ----------
+  function step() {
+    var n = S.seq.length; if (!n) return;
+    if (S.sub < 4) S.sub++;
+    else if (S.pos < n - 1) { S.pos++; S.sub = 1; }
+    render(true);
+  }
+  function back() {
+    if (S.sub > 1) S.sub--;
+    else if (S.sub === 1) { if (S.pos > 0) { S.pos--; S.sub = 4; } else S.sub = 0; }
+    render(false);
+  }
+  function finish() {
+    var n = S.seq.length; if (!n) return;
+    if (S.sub < 4) S.sub = 4;
+    else if (S.pos < n - 1) { S.pos++; S.sub = 4; }
+    render(true);
+  }
+  function runAll() { var n = S.seq.length; if (!n) return; S.pos = n - 1; S.sub = 4; render(false); }
+  function reset() { S.seq = parseTrace(); S.pos = 0; S.sub = 0; render(false); }
+
+  document.getElementById("step").addEventListener("click", step);
+  document.getElementById("back").addEventListener("click", back);
+  document.getElementById("next").addEventListener("click", finish);
+  document.getElementById("all").addEventListener("click", runAll);
+  document.getElementById("reset").addEventListener("click", reset);
+  document.getElementById("trace").addEventListener("change", reset);
+  // with 6-bit addresses, 16 slots x 4-byte blocks would leave 0 tag bits: refuse that combination
+  function noTag(slots, block) { return ADDR_BITS - log2(slots) - log2(block) < 1; }
+  function tagMsg(slots, block) {
+    document.getElementById("msg").textContent = slots + " slots with " + block + "-byte blocks would use all " + ADDR_BITS +
+      " address bits for the index and offset, leaving no bits for the tag. Pick fewer slots or smaller blocks.";
+  }
+  document.getElementById("slots").addEventListener("change", function (e) {
+    var v = +e.target.value;
+    if (noTag(v, S.block)) { e.target.value = S.slots; tagMsg(v, S.block); return; }
+    S.slots = v; reset();
+  });
+  document.getElementById("block").addEventListener("change", function (e) {
+    var v = +e.target.value;
+    if (noTag(S.slots, v)) { e.target.value = S.block; tagMsg(S.slots, v); return; }
+    S.block = v; reset();
+  });
+  document.getElementById("dec").addEventListener("change", function (e) { S.dec = e.target.checked; render(false); });
+  document.addEventListener("keydown", function (e) {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.key === "ArrowRight") { e.preventDefault(); step(); }
+    if (e.key === "ArrowLeft") { e.preventDefault(); back(); }
+  });
+
+  // click a RAM value to edit it
+  document.getElementById("ram").addEventListener("click", function (e) {
+    var td = e.target.closest("td.v");
+    if (!td || td.querySelector("input")) return;
+    var a = +td.getAttribute("data-a");
+    td.innerHTML = '<input value="' + bin(ram[a], 8) + '" aria-label="new value for address ' + bin(a, ADDR_BITS) + '">';
+    var inp = td.querySelector("input");
+    inp.focus(); inp.select();
+    function commit() {
+      var v = parseValue(inp.value);
+      if (v !== null && v !== ram[a]) { ram[a] = v; S.pos = 0; S.sub = 0; }
+      render(false);
+    }
+    inp.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+      if (ev.key === "Escape") render(false);
+    });
+    inp.addEventListener("blur", commit);
+  });
+
+  reset();
+  (function () {
+    var h = (location.hash || "").replace("#", ""), q = {};
+    h.split("&").forEach(function (kv) { var p = kv.split("="); if (p[0]) q[p[0]] = p[1]; });
+    if (q.slots) { S.slots = +q.slots; document.getElementById("slots").value = q.slots; }
+    if (q.block) { S.block = +q.block; document.getElementById("block").value = q.block; }
+    if (noTag(S.slots, S.block)) { S.block = 1; document.getElementById("block").value = "1"; }
+    if (q.trace) document.getElementById("trace").value = decodeURIComponent(q.trace);
+    if (q.slots || q.block || q.trace) reset();
+    if (q.step) for (var i = 0; i < +q.step; i++) step();
+  })();
+})();
+</script>
+</body>
+</html>
