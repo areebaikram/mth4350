@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two's Complement Explorer</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f4f3f7; --card: #ffffff; --ink: #1a1a1a; --muted: #5a5a66;
+    --line: #8a8a96; --faint: #d4d4dc; --hl: #ffd84d; --hl-ink: #1a1a1a;
+    --pos: #1464d2; --pos-soft: #e1ecfb; --neg: #9a9aa6; --ext: #3d3d48;
+    --ovf: #c0392b; --wrap: #11804a; --path: #b35c00;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+      --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d; --hl-ink: #15151a;
+      --pos: #85b6ff; --pos-soft: #1c2e4d; --neg: #6d6d7a; --ext: #c9c9d4;
+      --ovf: #ff7b6b; --wrap: #5fd39a; --path: #ffb35c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+    --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d; --hl-ink: #15151a;
+    --pos: #85b6ff; --pos-soft: #1c2e4d; --neg: #6d6d7a; --ext: #c9c9d4;
+    --ovf: #ff7b6b; --wrap: #5fd39a; --path: #ffb35c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 12px 16px 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px; line-height: 1.4; overflow-x: hidden;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 0 0 2px; }
+  .intro { margin: 0 0 10px; color: var(--muted); font-size: .95rem; }
+  .mono { font-family: var(--mono); }
+  .panel { background: var(--panel); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button { font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--faint);
+    background: var(--card); color: var(--ink); cursor: pointer; }
+  .tabs button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; }
+  .ctl { display: flex; flex-direction: column; gap: 2px; }
+  .ctl label, .lbl { font-weight: 600; font-size: .82rem; color: var(--muted); }
+  select, input[type=text] { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); }
+  input[type=text] { font-family: var(--mono); width: 9em; }
+  input.bad { border-color: var(--ovf); }
+  button.act { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); cursor: pointer; }
+  button.act:hover { border-color: var(--ink); }
+  .bits { display: flex; gap: 3px; }
+  .bits button { font-family: var(--mono); font-size: 1.05rem; width: 2em; height: 2em; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; padding: 0; }
+  .bits button.one { background: var(--pos-soft); border-color: var(--pos); font-weight: 700; }
+  .bits button.msb { outline: 2px dashed var(--neg); outline-offset: 1px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { fill: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  svg .m { font-family: var(--mono); }
+  .readout { font-size: .98rem; }
+  .readout div { margin: 2px 0; }
+  .flag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .85rem; font-weight: 700; }
+  .flag.ovf { color: var(--ovf); border: 1.5px solid var(--ovf); }
+  .flag.ok { color: var(--wrap); border: 1.5px solid var(--wrap); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .85rem; color: var(--muted); margin-top: 4px; }
+  .sw { display: inline-block; width: 18px; height: 0; border-top: 3px dashed; vertical-align: middle; margin-right: 5px; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 10px; align-items: start; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .hide { display: none !important; }
+  #wheel { max-height: 78vh; }
+  .note { color: var(--muted); font-size: .9rem; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 760px) { .grid3 { grid-template-columns: 1fr; } }
+  .grid3 h2 { font-size: 1rem; margin: 0 0 4px; text-align: center; }
+  .sum { font-family: var(--mono); white-space: pre; font-size: .95rem; margin: 4px 0; }
+  table.cmp { border-collapse: collapse; font-size: .95rem; }
+  table.cmp th, table.cmp td { border: 1px solid var(--faint); padding: 3px 12px; text-align: center; }
+  table.cmp th { background: var(--card); }
+  table.cmp td.z2 { color: var(--ovf); font-weight: 700; }
+  table.cmp tr.hx td { background: var(--pos-soft); }
+  table.cmp tr.hy td { background: color-mix(in srgb, var(--hl) 35%, transparent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Two's Complement Explorer</h1>
+  <p class="intro">The same bit patterns, read two ways. Use the wheel for addition and overflow, and the number line for the negative weight and sign extension.</p>
+
+  <div class="tabs">
+    <button id="tabWheel" class="on">Wheel</button>
+    <button id="tabLine">Number line</button>
+    <button id="tabCmp">Compare schemes</button>
+  </div>
+
+  <!-- ================= WHEEL ================= -->
+  <section id="wheelView">
+    <div class="panel controls">
+      <div class="ctl"><label for="wn">Number of bits</label>
+        <select id="wn"><option>3</option><option selected>4</option><option>5</option></select></div>
+      <div class="ctl"><label for="wread">Read the bits as</label>
+        <select id="wread">
+          <option value="tc" selected>two's complement</option>
+          <option value="u">unsigned</option>
+          <option value="both">both</option>
+        </select></div>
+      <div class="ctl"><label for="wa">A (bits)</label><input type="text" id="wa" value="0111"></div>
+      <div class="ctl"><label for="wb">B (bits)</label><input type="text" id="wb" value="0001"></div>
+      <div class="ctl"><span class="lbl">&nbsp;</span>
+        <div style="display:flex; gap:6px">
+          <button class="act" id="wgo">Add A + B</button>
+          <button class="act" id="wclear">Clear</button>
+        </div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><svg id="wheel" viewBox="0 0 440 440" role="img" aria-label="Wheel of bit patterns"></svg>
+        <div class="legend">
+          <span><span class="sw" style="border-color:var(--ovf)"></span>two's complement overflow line</span>
+          <span><span class="sw" style="border-color:var(--wrap)"></span>unsigned wrap line (carry out)</span>
+        </div>
+      </div>
+      <div class="panel readout" id="wout">
+        <div class="note">Click a pattern on the wheel to set A (click again with B selected below to set B).</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= NUMBER LINE ================= -->
+  <section id="lineView" class="hide">
+    <div class="panel controls">
+      <div class="ctl"><label for="ln">Number of bits</label>
+        <select id="ln"><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option></select></div>
+      <div class="ctl"><span class="lbl">Bits (click to flip)</span><div class="bits" id="lbits"></div></div>
+      <div class="ctl"><label for="lext">Extend to</label>
+        <select id="lext"><option value="0" selected>(don't extend)</option></select></div>
+      <div class="ctl"><label for="lpad">Fill the new bits with</label>
+        <select id="lpad"><option value="sign" selected>copies of the sign bit</option><option value="zero">0s</option></select></div>
+    </div>
+    <div class="panel"><svg id="line" viewBox="0 0 800 300" role="img" aria-label="Number line with bit weights"></svg></div>
+    <div class="panel readout" id="lout"></div>
+  </section>
+
+  <!-- ================= COMPARE SCHEMES ================= -->
+  <section id="cmpView" class="hide">
+    <div class="panel controls">
+      <div class="ctl"><label for="cn">Number of bits</label>
+        <select id="cn"><option selected>3</option><option>4</option></select></div>
+      <div class="ctl"><label for="cx">X</label><select id="cx"></select></div>
+      <div class="ctl"><label for="cy">Y</label><select id="cy"></select></div>
+      <div class="ctl"><span class="lbl">Try</span>
+        <div style="display:flex; gap:6px; flex-wrap:wrap">
+          <button class="act" data-x="3" data-y="-3">3 + (−3)</button>
+          <button class="act" data-x="-2" data-y="3">(−2) + 3</button>
+          <button class="act" data-x="1" data-y="-1">1 + (−1)</button>
+          <button class="act" data-x="-1" data-y="-2">(−1) + (−2)</button>
+        </div></div>
+    </div>
+    <p class="note" style="margin:0 0 8px">Each scheme writes X and Y as bits. The usual adder adds the bits and drops the last carry. On the wheel, that always means: start at X and move <b>clockwise</b> by Y's bits read as unsigned. Then read where you land in the same scheme.</p>
+    <div class="legend" style="margin:0 0 8px"><span><b style='color:var(--pos)'>● X</b></span><span><b><span style='color:var(--hl)'>●</span> Y</b> (Y's own bits)</span><span><b style='color:var(--path)'>→ adder's path, ● where it lands</b></span><span><b style='color:var(--wrap)'>○ correct answer</b></span><span><b style='color:var(--ovf)'>−0</b> = a second zero</span></div>
+    <div class="grid3" id="cwheels"></div>
+    <div class="panel"><h2 style="font-size:.95rem;margin:0 0 6px">All together</h2><div id="ctable" style="overflow-x:auto"></div></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function bin(u, n) { var s = u.toString(2); while (s.length < n) s = "0" + s; return s; }
+  function tc(u, n) { return u >= (1 << (n - 1)) ? u - (1 << n) : u; }
+  function fmt(v) { return v < 0 ? "−" + (-v) : String(v); }
+  function $(id) { return document.getElementById(id); }
+
+  /* ---------- tabs ---------- */
+  function showTab(w) {
+    $("tabWheel").classList.toggle("on", w === "wheel");
+    $("tabLine").classList.toggle("on", w === "line");
+    $("wheelView").classList.toggle("hide", w !== "wheel");
+    $("lineView").classList.toggle("hide", w !== "line");
+    $("tabCmp").classList.toggle("on", w === "cmp");
+    $("cmpView").classList.toggle("hide", w !== "cmp");
+  }
+  $("tabWheel").onclick = function () { showTab("wheel"); };
+  $("tabLine").onclick = function () { showTab("line"); };
+  $("tabCmp").onclick = function () { showTab("cmp"); };
+
+  /* ================= WHEEL ================= */
+  var W = { n: 4, read: "tc", a: 7, b: 1, path: null, shown: 0, timer: null, pick: "A" };
+  var CX = 220, CY = 220, R = 150;
+  var SIZES = { 3: 150, 4: 160, 5: 225 };   // radius per number of bits; the viewBox grows with it
+  function ang(k, N) { return -Math.PI / 2 + 2 * Math.PI * k / N; }
+  function pt(k, N, r) { var a = ang(k, N); return [CX + r * Math.cos(a), CY + r * Math.sin(a)]; }
+
+  function readBits(id, n) {
+    var inp = $(id), s = inp.value.trim();
+    var ok = /^[01]+$/.test(s) && s.length === n;
+    inp.classList.toggle("bad", !ok);
+    return ok ? parseInt(s, 2) : null;
+  }
+
+  function stepsFor() {
+    // move by B's value in the reading being used: unsigned -> clockwise u(B); two's complement -> signed
+    var N = 1 << W.n;
+    return W.read === "u" ? W.b : tc(W.b, W.n);
+  }
+
+  function drawWheel() {
+    var svg = $("wheel"); svg.innerHTML = "";
+    var n = W.n, N = 1 << n;
+    R = SIZES[n]; CX = CY = R + 70;
+    svg.setAttribute("viewBox", "0 0 " + 2 * CX + " " + 2 * CY);
+    var fs = n >= 5 ? 13 : 14, fsv = n >= 5 ? 14 : 15;
+    el("circle", { cx: CX, cy: CY, r: R, fill: "none", stroke: "var(--faint)", "stroke-width": 2 }, svg);
+    // boundary lines
+    function boundary(k1, color) {
+      var a = (ang(k1, N) + ang(k1 + 1, N)) / 2;
+      el("line", { x1: CX + 40 * Math.cos(a), y1: CY + 40 * Math.sin(a), x2: CX + (R + 52) * Math.cos(a), y2: CY + (R + 52) * Math.sin(a),
+        stroke: color, "stroke-width": 2.5, "stroke-dasharray": "6 4" }, svg);
+    }
+    if (W.read !== "u") boundary((N >> 1) - 1, "var(--ovf)");
+    if (W.read !== "tc") boundary(N - 1, "var(--wrap)");
+
+    // path (animated)
+    if (W.path) {
+      var st = W.path.steps, dir = st < 0 ? -1 : 1, k = Math.min(W.shown, Math.abs(st));
+      if (k > 0) {
+        var d = "", rr = R - 34, M = Math.max(8, k * 6);
+        for (var i = 0; i <= M; i++) {
+          var t = W.path.start + dir * k * i / M, a = -Math.PI / 2 + 2 * Math.PI * t / N;
+          d += (i ? "L" : "M") + (CX + rr * Math.cos(a)).toFixed(1) + " " + (CY + rr * Math.sin(a)).toFixed(1);
+        }
+        el("path", { d: d, fill: "none", stroke: "var(--path)", "stroke-width": 4, "stroke-linecap": "round" }, svg);
+        var tEnd = W.path.start + dir * k, aE = -Math.PI / 2 + 2 * Math.PI * tEnd / N;
+        el("circle", { cx: CX + rr * Math.cos(aE), cy: CY + rr * Math.sin(aE), r: 6, fill: "var(--path)" }, svg);
+      }
+    }
+
+    var cur = W.path ? (((W.path.start + (W.path.steps < 0 ? -1 : 1) * Math.min(W.shown, Math.abs(W.path.steps))) % N) + N) % N : null;
+    for (var k = 0; k < N; k++) {
+      var p = pt(k, N, R), po = pt(k, N, R + 30), pi = pt(k, N, R - 20);
+      var isA = k === W.a, isB = k === W.b && !W.path, isCur = k === cur;
+      var g = el("g", { style: "cursor:pointer" }, svg);
+      el("circle", { cx: p[0], cy: p[1], r: isA || isCur || isB ? 8 : 4.5,
+        fill: isCur ? "var(--path)" : isA ? "var(--pos)" : isB ? "var(--hl)" : "var(--line)",
+        stroke: "var(--bg)", "stroke-width": 1.5 }, g);
+      el("text", { x: po[0], y: po[1] + 4, "text-anchor": "middle", "font-size": fs, class: "m",
+        "font-weight": isA || isCur ? 700 : 400 }, g, bin(k, n));
+      var v = W.read === "u" ? fmt(k) : fmt(tc(k, n));
+      el("text", { x: pi[0], y: pi[1] + 4, "text-anchor": "middle", "font-size": fsv, "font-weight": 700 }, g, v);
+      if (W.read === "both") {
+        var pu = pt(k, N, R - 40);
+        el("text", { x: pu[0], y: pu[1] + 4, "text-anchor": "middle", "font-size": fsv - 2, fill: "var(--muted)", style: "fill:var(--muted)" }, g, k);
+      }
+      (function (kk) { g.addEventListener("click", function () { clickPattern(kk); }); })(k);
+    }
+    if (W.read === "both") {
+      el("text", { x: CX, y: CY - 6, "text-anchor": "middle", "font-size": 12, style: "fill:var(--muted)" }, svg, "bold: two's complement");
+      el("text", { x: CX, y: CY + 12, "text-anchor": "middle", "font-size": 12, style: "fill:var(--muted)" }, svg, "gray: unsigned");
+    }
+  }
+
+  function clickPattern(k) {
+    stopAnim(); W.path = null;
+    if (W.pick === "A") { W.a = k; $("wa").value = bin(k, W.n); W.pick = "B"; }
+    else { W.b = k; $("wb").value = bin(k, W.n); W.pick = "A"; }
+    drawWheel(); writeWheel();
+  }
+
+  function writeWheel() {
+    var n = W.n, N = 1 << n, out = $("wout"), a = W.a, b = W.b;
+    var html = "<div class='note'>Click the wheel to set <b>" + W.pick + "</b> next.</div>";
+    html += "<div><b>A</b> = <span class='mono'>" + bin(a, n) + "</span>: unsigned " + a + ", two's complement " + fmt(tc(a, n)) + "</div>";
+    html += "<div><b>B</b> = <span class='mono'>" + bin(b, n) + "</span>: unsigned " + b + ", two's complement " + fmt(tc(b, n)) + "</div>";
+    if (W.path && W.shown >= Math.abs(W.path.steps)) {
+      var r = (a + b) % N, carry = a + b >= N, ts = tc(a, n) + tc(b, n);
+      var lo = -(N >> 1), hi = (N >> 1) - 1, ovf = ts < lo || ts > hi;
+      html += "<hr style='border:0;border-top:1px solid var(--faint)'>";
+      html += "<div class='mono' style='white-space:pre;font-size:1.05rem'>  " + bin(a, n) + "\n+ " + bin(b, n) + "\n" +
+        (carry ? "1" : " ") + " " + bin(r, n) + (carry ? "   ← carry out dropped" : "") + "</div>";
+      if (W.read !== "tc") html += "<div><b>Unsigned:</b> " + a + " + " + b + " = " + (a + b) + "; the bits read " + r + ". " +
+        (carry ? "<span class='flag ovf'>carry out: wrong</span>" : "<span class='flag ok'>correct</span>") + "</div>";
+      if (W.read !== "u") html += "<div><b>Two's complement:</b> " + fmt(tc(a, n)) + " + " + fmt(tc(b, n)) + " = " + fmt(ts) +
+        "; the bits read " + fmt(tc(r, n)) + ". " + (ovf ? "<span class='flag ovf'>overflow</span>" : "<span class='flag ok'>correct</span>") + "</div>";
+      if (W.read !== "u") html += "<div class='note'>Range for " + n + " bits: " + fmt(lo) + " to " + hi + ".</div>";
+    } else if (!W.path) {
+      html += "<div class='note' style='margin-top:6px'>Press <b>Add A + B</b>. The orange path moves by B: clockwise for a positive B, counterclockwise for a negative B (in two's complement).</div>";
+    }
+    out.innerHTML = html;
+  }
+
+  function stopAnim() { if (W.timer) { clearInterval(W.timer); W.timer = null; } }
+  function go() {
+    var a = readBits("wa", W.n), b = readBits("wb", W.n);
+    if (a == null || b == null) return;
+    stopAnim(); W.a = a; W.b = b;
+    var st = stepsFor();
+    W.path = { start: a, steps: st }; W.shown = 0;
+    var total = Math.abs(st), delay = Math.max(40, Math.min(220, 2400 / Math.max(1, total)));
+    drawWheel(); writeWheel();
+    if (total === 0) { W.shown = 0; writeWheel(); return; }
+    W.timer = setInterval(function () {
+      W.shown++; drawWheel();
+      if (W.shown >= total) { stopAnim(); writeWheel(); }
+    }, delay);
+  }
+  $("wgo").onclick = go;
+  $("wclear").onclick = function () { stopAnim(); W.path = null; drawWheel(); writeWheel(); };
+  $("wn").onchange = function () {
+    var n = +this.value, N = 1 << n; stopAnim(); W.path = null; W.n = n;
+    W.a = (1 << (n - 1)) - 1; W.b = 1;
+    $("wa").value = bin(W.a, n); $("wb").value = bin(W.b, n);
+    $("wa").classList.remove("bad"); $("wb").classList.remove("bad");
+    drawWheel(); writeWheel();
+  };
+  $("wread").onchange = function () { W.read = this.value; stopAnim(); W.path = null; drawWheel(); writeWheel(); };
+  ["wa", "wb"].forEach(function (id) {
+    $(id).addEventListener("input", function () {
+      var v = readBits(id, W.n); if (v == null) return;
+      stopAnim(); W.path = null; if (id === "wa") W.a = v; else W.b = v; drawWheel(); writeWheel();
+    });
+    $(id).addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+  });
+
+  /* ================= NUMBER LINE ================= */
+  var L = { n: 4, bits: [1, 0, 1, 1], m: 0, pad: "sign" };   // bits[0] = leftmost
+
+  function buildBitButtons() {
+    var box = $("lbits"); box.innerHTML = "";
+    L.bits.forEach(function (b, i) {
+      var btn = document.createElement("button");
+      btn.textContent = b; btn.className = (b ? "one" : "") + (i === 0 ? " msb" : "");
+      btn.title = i === 0 ? "weight −" + Math.pow(2, L.n - 1) : "weight " + Math.pow(2, L.n - 1 - i);
+      btn.onclick = function () { L.bits[i] = 1 - L.bits[i]; buildBitButtons(); drawLine(); };
+      box.appendChild(btn);
+    });
+  }
+  function buildExtOptions() {
+    var sel = $("lext"), cur = L.m; sel.innerHTML = "<option value='0'>(don't extend)</option>";
+    [4, 5, 6, 8].forEach(function (m) { if (m > L.n) { var o = document.createElement("option"); o.value = m; o.textContent = m + " bits"; sel.appendChild(o); } });
+    if (cur > L.n) sel.value = cur; else { L.m = 0; sel.value = "0"; }
+  }
+  function valueOf(bits) {
+    var n = bits.length, v = -bits[0] * Math.pow(2, n - 1);
+    for (var i = 1; i < n; i++) v += bits[i] * Math.pow(2, n - 1 - i);
+    return v;
+  }
+  function extended() {
+    if (!L.m) return null;
+    var fill = L.pad === "sign" ? L.bits[0] : 0, e = [];
+    for (var i = 0; i < L.m - L.n; i++) e.push(fill);
+    return e.concat(L.bits);
+  }
+
+  function drawLine() {
+    var svg = $("line"); svg.innerHTML = "";
+    var ext = extended(), big = ext ? L.m : L.n;
+    var lo = -Math.pow(2, big - 1), hi = Math.pow(2, big - 1);
+    var X0 = 70, X1 = 770;
+    function x(v) { return X0 + (v - lo) / (hi - lo) * (X1 - X0); }
+    var rows = [{ bits: L.bits, label: L.bits.join(""), orig: L.n }];
+    if (ext) rows.push({ bits: ext, label: ext.join(""), orig: L.n, isExt: true });
+
+    // weight legend for the longer pattern
+    var y = 14, bh = 14, gap = 6;
+    var wb = ext || L.bits, wn = wb.length;
+    for (var i = 0; i < wn; i++) {
+      var w = i === 0 ? -Math.pow(2, wn - 1) : Math.pow(2, wn - 1 - i);
+      var newBit = ext && i > 0 && i <= L.m - L.n;
+      var col = i === 0 ? "var(--neg)" : newBit ? "var(--ext)" : "var(--pos)";
+      el("rect", { x: Math.min(x(0), x(w)), y: y, width: Math.abs(x(w) - x(0)), height: bh, rx: 3, fill: col, opacity: .9 }, svg);
+      el("text", { x: w < 0 ? x(0) + 6 : x(w) + 6, y: y + bh - 2, "font-size": 12 }, svg, (i === 0 ? "−" : "") + "2").appendChild(sup(wn - 1 - i, " = " + fmt(w)));
+      y += bh + gap;
+    }
+    // axis
+    var ay = y + 18;
+    el("line", { x1: X0, y1: ay, x2: X1, y2: ay, stroke: "var(--ink)", "stroke-width": 1.5 }, svg);
+    var range = hi - lo, step = 1; while (range / step > 16) step *= 2;
+    for (var v = lo; v <= hi; v += step) {
+      el("line", { x1: x(v), y1: ay - 5, x2: x(v), y2: ay + 5, stroke: "var(--ink)", "stroke-width": 1.2 }, svg);
+      el("text", { x: x(v), y: ay - 9, "text-anchor": "middle", "font-size": 12 }, svg, fmt(v));
+    }
+    // rows
+    var ry = ay + 26;
+    rows.forEach(function (row) {
+      var n = row.bits.length, h = 22;
+      el("text", { x: X0 - 8, y: ry + h / 2 + 5, "text-anchor": "end", "font-size": 14, class: "m" }, svg, "[" + row.label + "]");
+      var cur = 0;
+      if (row.bits[0]) {
+        cur = -Math.pow(2, n - 1);
+        el("rect", { x: x(cur), y: ry, width: x(0) - x(cur), height: h / 2, rx: 3, fill: "var(--neg)", opacity: .75 }, svg);
+      }
+      for (var i = 1; i < n; i++) {
+        if (!row.bits[i]) continue;
+        var w = Math.pow(2, n - 1 - i), newBit = row.isExt && i < n - row.orig + 1;
+        el("rect", { x: x(cur), y: ry + h / 2, width: x(cur + w) - x(cur) - 1, height: h / 2, rx: 3,
+          fill: newBit ? "var(--ext)" : "var(--pos)" }, svg);
+        cur += w;
+      }
+      el("line", { x1: x(cur), y1: ay, x2: x(cur), y2: ry + h + 2, stroke: "var(--ink)", "stroke-width": 1.2 }, svg);
+      el("circle", { cx: x(cur), cy: ry + h + 2, r: 3.5, fill: "var(--ink)" }, svg);
+      ry += h + 18;
+    });
+    svg.setAttribute("viewBox", "0 0 800 " + (ry + 4));
+
+    // readout
+    var out = "";
+    rows.forEach(function (row) {
+      var n = row.bits.length, terms = [];
+      for (var i = 0; i < n; i++) {
+        var w = i === 0 ? -Math.pow(2, n - 1) : Math.pow(2, n - 1 - i);
+        if (row.bits[i]) terms.push(i === 0 ? fmt(w) : (terms.length ? "+ " : "") + w);
+      }
+      var unsigned = parseInt(row.bits.join(""), 2);
+      out += "<div><span class='mono'><b>" + row.label + "</b></span> (" + n + "-bit two's complement) = " +
+        (terms.length ? terms.join(" ") : "0") + " = <b>" + fmt(valueOf(row.bits)) + "</b>" +
+        "<span class='note'> &nbsp;(read as unsigned: " + unsigned + ")</span></div>";
+    });
+    if (ext) {
+      var same = valueOf(ext) === valueOf(L.bits);
+      out += "<div style='margin-top:4px'>" + (same
+        ? "<span class='flag ok'>same value</span> Both rows end at the same point."
+        : "<span class='flag ovf'>different value</span> Padding with 0s changed the number.") + "</div>";
+    }
+    $("lout").innerHTML = out;
+  }
+  function sup(e, tail) {
+    var t = document.createElementNS(NS, "tspan"); var s = document.createElementNS(NS, "tspan");
+    s.setAttribute("baseline-shift", "super"); s.setAttribute("font-size", "9"); s.textContent = e;
+    t.appendChild(s); var r = document.createElementNS(NS, "tspan"); r.textContent = tail; t.appendChild(r);
+    return t;
+  }
+
+  $("ln").onchange = function () {
+    var n = +this.value, b = L.bits.slice();
+    while (b.length < n) b.unshift(b[0]);           // grow by sign extension
+    while (b.length > n) b.shift();                 // shrink: drop leftmost bits
+    L.n = n; L.bits = b; buildExtOptions(); buildBitButtons(); drawLine();
+  };
+  $("lext").onchange = function () { L.m = +this.value; drawLine(); };
+  $("lpad").onchange = function () { L.pad = this.value; drawLine(); };
+
+  /* ================= COMPARE SCHEMES ================= */
+  var C = { n: 3, x: 3, y: -3 };
+  var SCHEMES = [
+    { key: "sm", name: "Sign-magnitude",
+      enc: function (v, n) { return v >= 0 ? v : (1 << (n - 1)) | -v; },
+      dec: function (u, n) { var h = 1 << (n - 1), m = u & (h - 1); return u & h ? (m ? -m : "−0") : m; } },
+    { key: "oc", name: "Ones' complement",
+      enc: function (v, n) { var mask = (1 << n) - 1; return v >= 0 ? v : (~(-v)) & mask; },
+      dec: function (u, n) { var mask = (1 << n) - 1, h = 1 << (n - 1); if (!(u & h)) return u; var m = (~u) & mask; return m ? -m : "−0"; } },
+    { key: "tc", name: "Two's complement",
+      enc: function (v, n) { return v >= 0 ? v : v + (1 << n); },
+      dec: function (u, n) { return tc(u, n); } }
+  ];
+  function show(v) { return typeof v === "string" ? v : fmt(v); }
+
+  function fillValueSelects() {
+    var h = (1 << (C.n - 1)) - 1;   // range every scheme can write
+    ["cx", "cy"].forEach(function (id) {
+      var sel = $(id); sel.innerHTML = "";
+      for (var v = -h; v <= h; v++) { var o = document.createElement("option"); o.value = v; o.textContent = fmt(v); sel.appendChild(o); }
+    });
+    C.x = Math.max(-h, Math.min(h, C.x)); C.y = Math.max(-h, Math.min(h, C.y));
+    $("cx").value = C.x; $("cy").value = C.y;
+  }
+
+  function drawCompare() {
+    var n = C.n, N = 1 << n, mask = N - 1, box = $("cwheels"); box.innerHTML = "";
+    var Rm = n === 3 ? 92 : 108, cx0 = Rm + 64, size = 2 * cx0, h = (1 << (n - 1)) - 1;
+    SCHEMES.forEach(function (s) {
+      var panel = document.createElement("div"); panel.className = "panel";
+      panel.innerHTML = "<h2>" + s.name + "</h2>";
+      var svg = el("svg", { viewBox: "0 0 " + size + " " + size, role: "img", "aria-label": s.name + " wheel" }, panel);
+      var xb = s.enc(C.x, n), yb = s.enc(C.y, n), rb = (xb + yb) & mask, carry = xb + yb > mask;
+      var want = C.x + C.y, lowest = s.key === "tc" ? -h - 1 : -h;
+      var fits = want >= lowest && want <= h, wb = fits ? s.enc(want, n) : null;
+      function A(t) { return -Math.PI / 2 + 2 * Math.PI * t / N; }
+      function P(k, r) { var a = A(k); return [cx0 + r * Math.cos(a), cx0 + r * Math.sin(a)]; }
+      function arc(t0, steps, r, color, dash) {
+        // arc from pattern t0 moving `steps` (negative = counterclockwise), with an arrowhead at the end
+        var d = "", M = Math.max(8, Math.abs(steps) * 8);
+        for (var i = 0; i <= M; i++) {
+          var a = A(t0 + steps * i / M);
+          d += (i ? "L" : "M") + (cx0 + r * Math.cos(a)).toFixed(1) + " " + (cx0 + r * Math.sin(a)).toFixed(1);
+        }
+        var at = { d: d, fill: "none", stroke: color, "stroke-width": 3.5, "stroke-linecap": "round" };
+        if (dash) at["stroke-dasharray"] = "7 5";
+        el("path", at, svg);
+        var aE = A(t0 + steps), dir = steps > 0 ? 1 : -1;
+        var ex = cx0 + r * Math.cos(aE), ey = cx0 + r * Math.sin(aE);
+        var tx = -Math.sin(aE) * dir, ty = Math.cos(aE) * dir;           // tangent in the direction of travel
+        var nx = Math.cos(aE), ny = Math.sin(aE), L = 11, W2 = 6;
+        el("polygon", { points: [ex + tx * 3, ey + ty * 3, ex - tx * L + nx * W2, ey - ty * L + ny * W2, ex - tx * L - nx * W2, ey - ty * L - ny * W2].map(function (q) { return q.toFixed(1); }).join(" "),
+          fill: color }, svg);
+      }
+      el("circle", { cx: cx0, cy: cx0, r: Rm, fill: "none", stroke: "var(--faint)", "stroke-width": 2 }, svg);
+      // what the adder does: start at X, count forward (clockwise) by Y's bits read as unsigned
+      if (yb > 0) arc(xb, yb, Rm - 32, "var(--path)", false);
+      // two's complement with a negative Y: the same landing spot as going back |Y| (subtracting)
+      if (s.key === "tc" && C.y < 0) arc(xb, C.y, Rm - 52, "var(--wrap)", true);
+      // the correct answer's pattern: green ring
+      if (wb != null) { var pw = P(wb, Rm); el("circle", { cx: pw[0], cy: pw[1], r: 12, fill: "none", stroke: "var(--wrap)", "stroke-width": 3 }, svg); }
+      for (var k = 0; k < N; k++) {
+        var p = P(k, Rm), po = P(k, Rm + 22), pi = P(k, Rm - 16), v = s.dec(k, n);
+        var col = k === rb ? "var(--path)" : k === xb ? "var(--pos)" : k === yb ? "var(--hl)" : "var(--line)";
+        var big = k === rb || k === xb || k === yb;
+        el("circle", { cx: p[0], cy: p[1], r: big ? 7 : 4, fill: col, stroke: "var(--bg)", "stroke-width": 1.5 }, svg);
+        el("text", { x: po[0], y: po[1] + 4, "text-anchor": "middle", "font-size": 11.5, class: "m" }, svg, bin(k, n));
+        var tx = el("text", { x: pi[0], y: pi[1] + 4, "text-anchor": "middle", "font-size": 13, "font-weight": 700 }, svg, show(v));
+        if (v === "−0") tx.setAttribute("style", "fill:var(--ovf)");
+        // name tags outside the bit labels
+        var tags = [];
+        if (k === xb) tags.push("X");
+        if (k === yb) tags.push("Y");
+        if (k === rb) tags.push("lands");
+        if (tags.length) {
+          var pt2 = P(k, Rm + 46);
+          var tg = el("text", { x: pt2[0], y: pt2[1] + 4, "text-anchor": "middle", "font-size": 12, "font-weight": 700 }, svg, tags.join(", "));
+          tg.setAttribute("style", "fill:" + (k === rb ? "var(--path)" : k === xb ? "var(--pos)" : "var(--ink)"));
+        }
+      }
+      var got = s.dec(rb, n);
+      var right = got === want, sortOf = got === "−0" && want === 0;
+      var sum = document.createElement("div"); sum.className = "sum";
+      sum.textContent = "  " + bin(xb, n) + "   (" + fmt(C.x) + ")\n+ " + bin(yb, n) + "   (" + fmt(C.y) + ")\n" +
+        (carry ? "1" : " ") + " " + bin(rb, n) + "   reads as " + show(got);
+      panel.appendChild(sum);
+      var verdict = document.createElement("div");
+      verdict.innerHTML = right ? "<span class='flag ok'>correct: " + fmt(want) + "</span>"
+        : sortOf ? "<span class='flag' style='color:var(--path);border:1.5px solid var(--path)'>sort of: landed on −0, a second zero</span>"
+        : "<span class='flag ovf'>wrong: should be " + fmt(want) + "</span>";
+      panel.appendChild(verdict);
+      var cap = document.createElement("div"); cap.className = "note"; cap.style.marginTop = "6px";
+      cap.innerHTML = yb > 0 ? "Adder: start at X, move <b>" + yb + " steps clockwise</b> (Y's bits <span class='mono'>" + bin(yb, n) + "</span> = " + yb + " as unsigned)." : "Y's bits are all 0, so the adder doesn't move.";
+      if (s.key === "tc" && C.y < 0) cap.innerHTML += " <span style='color:var(--wrap)'>Dashed: the same as moving " + (-C.y) + " steps <b>back</b>, i.e. subtracting " + (-C.y) + ", since " + yb + " = " + N + " − " + (-C.y) + ".</span>";
+      if (!fits) cap.innerHTML += " <b>X + Y = " + fmt(want) + " doesn't fit in " + n + " bits (overflow).</b>";
+      panel.appendChild(cap);
+      box.appendChild(panel);
+    });
+    // table
+    var xbT = SCHEMES.map(function (s) { return s.enc(C.x, n); }), html = "<table class='cmp'><tr><th>bits</th><th>unsigned</th>";
+    SCHEMES.forEach(function (s) { html += "<th>" + s.name.toLowerCase() + "</th>"; });
+    html += "</tr>";
+    for (var u = 0; u < N; u++) {
+      html += "<tr><td class='mono'>" + bin(u, n) + "</td><td>" + u + "</td>";
+      SCHEMES.forEach(function (s) { var v = s.dec(u, n); html += "<td" + (v === "−0" ? " class='z2'" : "") + ">" + show(v) + "</td>"; });
+      html += "</tr>";
+    }
+    $("ctable").innerHTML = html + "</table>";
+  }
+
+  $("cn").onchange = function () { C.n = +this.value; fillValueSelects(); drawCompare(); };
+  $("cx").onchange = function () { C.x = +this.value; drawCompare(); };
+  $("cy").onchange = function () { C.y = +this.value; drawCompare(); };
+  Array.prototype.forEach.call(document.querySelectorAll("#cmpView button[data-x]"), function (b) {
+    b.onclick = function () { C.x = +b.dataset.x; C.y = +b.dataset.y; $("cx").value = C.x; $("cy").value = C.y; drawCompare(); };
+  });
+
+  /* ---------- init ---------- */
+  drawWheel(); writeWheel();
+  buildExtOptions(); buildBitButtons(); drawLine();
+  fillValueSelects(); drawCompare();
+})();
+</script>
+</body>
+</html>
