@@ -75,6 +75,10 @@
   .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   @media (max-width: 760px) { .grid3 { grid-template-columns: 1fr; } }
   .grid3 h2 { font-size: 1rem; margin: 0 0 4px; text-align: center; }
+  button.act.main { font-weight: 700; background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.act:disabled { opacity: .45; cursor: default; }
+  .stepbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .stepbar .say { flex: 1 1 320px; font-size: 1.02rem; }
   .sum { font-family: var(--mono); white-space: pre; font-size: .95rem; margin: 4px 0; }
   table.cmp { border-collapse: collapse; font-size: .95rem; }
   table.cmp th, table.cmp td { border: 1px solid var(--faint); padding: 3px 12px; text-align: center; }
@@ -157,8 +161,14 @@
           <button class="act" data-x="-1" data-y="-2">(−1) + (−2)</button>
         </div></div>
     </div>
-    <p class="note" style="margin:0 0 8px">Each scheme writes X and Y as bits. The usual adder adds the bits and drops the last carry. On the wheel, that always means: start at X and move <b>clockwise</b> by Y's bits read as unsigned. Then read where you land in the same scheme.</p>
+    <p class="note" style="margin:0 0 8px">Use <b>Next step</b> to walk through it. Each scheme writes X and Y as bits. The usual adder adds the bits and drops the last carry. On the wheel, that always means: start at X and move <b>clockwise</b> by Y's bits read as unsigned. Then read where you land in the same scheme.</p>
     <div class="legend" style="margin:0 0 8px"><span><b style='color:var(--pos)'>● X</b></span><span><b><span style='color:var(--hl)'>●</span> Y</b> (Y's own bits)</span><span><b style='color:var(--path)'>→ adder's path, ● where it lands</b></span><span><b style='color:var(--wrap)'>○ correct answer</b></span><span><b style='color:var(--ovf)'>−0</b> = a second zero</span></div>
+    <div class="panel stepbar">
+      <button class="act" id="cback">◀ Back</button>
+      <button class="act main" id="cfwd">Next step ▶</button>
+      <button class="act" id="call">Show all</button>
+      <div class="say" id="cstep"></div>
+    </div>
     <div class="grid3" id="cwheels"></div>
     <div class="panel"><h2 style="font-size:.95rem;margin:0 0 6px">All together</h2><div id="ctable" style="overflow-x:auto"></div></div>
   </section>
@@ -207,10 +217,13 @@
   }
 
   function stepsFor() {
-    // move by B's value in the reading being used: unsigned -> clockwise u(B); two's complement -> signed
-    var N = 1 << W.n;
-    return W.read === "u" ? W.b : tc(W.b, W.n);
+    // the adder always moves clockwise by B's bits read as unsigned, whatever reading we use;
+    // passing the top (all 1's -> all 0's) is the carry out
+    return W.b;
   }
+
+  // does a clockwise path of k steps from `start` pass the red line (between 01..1 and 10..0)?
+  function crossedRed(start, k, N) { return ((N / 2 - start - 1) % N + N) % N + 1 <= k; }
 
   function drawWheel() {
     var svg = $("wheel"); svg.innerHTML = "";
@@ -226,7 +239,7 @@
         stroke: color, "stroke-width": 2.5, "stroke-dasharray": "6 4" }, svg);
     }
     if (W.read !== "u") boundary((N >> 1) - 1, "var(--ovf)");
-    if (W.read !== "tc") boundary(N - 1, "var(--wrap)");
+    boundary(N - 1, "var(--wrap)");
 
     // path (animated)
     if (W.path) {
@@ -240,6 +253,25 @@
         el("path", { d: d, fill: "none", stroke: "var(--path)", "stroke-width": 4, "stroke-linecap": "round" }, svg);
         var tEnd = W.path.start + dir * k, aE = -Math.PI / 2 + 2 * Math.PI * tEnd / N;
         el("circle", { cx: CX + rr * Math.cos(aE), cy: CY + rr * Math.sin(aE), r: 6, fill: "var(--path)" }, svg);
+        // passed the top: that's the carry out
+        if (W.path.start + k >= N) {
+          var tc0 = pt(N - 0.5, N, R + 58);
+          el("text", { x: tc0[0], y: tc0[1] + 4, "text-anchor": "middle", "font-size": 14, "font-weight": 700, style: "fill:var(--wrap)" }, svg, "carry out!");
+        }
+        // passed the red line (0111 -> 1000): a carry INTO the leftmost bit
+        if (W.read !== "u" && crossedRed(W.path.start, k, N)) {
+          var tr0 = pt(N / 2 - 0.5, N, R + 62);
+          el("text", { x: tr0[0], y: tr0[1] + 4, "text-anchor": "middle", "font-size": 14, "font-weight": 700, style: "fill:var(--ovf)" }, svg, "carry into leftmost bit!");
+        }
+      }
+      // after landing, in two's complement with a negative B: the same spot as going back |B| (subtracting)
+      if (W.read !== "u" && tc(W.b, n) < 0 && W.shown >= W.b) {
+        var back = -tc(W.b, n), d2 = "", r2 = R - 58, M2 = Math.max(8, back * 6);
+        for (var j = 0; j <= M2; j++) {
+          var a2 = -Math.PI / 2 + 2 * Math.PI * (W.path.start - back * j / M2) / N;
+          d2 += (j ? "L" : "M") + (CX + r2 * Math.cos(a2)).toFixed(1) + " " + (CY + r2 * Math.sin(a2)).toFixed(1);
+        }
+        el("path", { d: d2, fill: "none", stroke: "var(--wrap)", "stroke-width": 3, "stroke-dasharray": "7 5", "stroke-linecap": "round" }, svg);
       }
     }
 
@@ -289,9 +321,20 @@
         (carry ? "<span class='flag ovf'>carry out: wrong</span>" : "<span class='flag ok'>correct</span>") + "</div>";
       if (W.read !== "u") html += "<div><b>Two's complement:</b> " + fmt(tc(a, n)) + " + " + fmt(tc(b, n)) + " = " + fmt(ts) +
         "; the bits read " + fmt(tc(r, n)) + ". " + (ovf ? "<span class='flag ovf'>overflow</span>" : "<span class='flag ok'>correct</span>") + "</div>";
-      if (W.read !== "u") html += "<div class='note'>Range for " + n + " bits: " + fmt(lo) + " to " + hi + ".</div>";
+      html += "<div class='note'>The adder moved <b>" + b + " steps clockwise</b> (B's bits <span class='mono'>" + bin(b, n) + "</span> = " + b + " as unsigned)" +
+        (carry ? ", passing the top (" + bin(N - 1, n) + " → " + bin(0, n) + "): that's the carry out, and it is dropped." : ".") + "</div>";
+      if (W.read !== "u" && tc(b, n) < 0) html += "<div class='note' style='color:var(--wrap)'>Dashed: landing in the same place as moving " + (-tc(b, n)) +
+        (tc(b, n) === -1 ? " step" : " steps") + " <b>back</b>, i.e. subtracting " + (-tc(b, n)) + ", since " + b + " = " + N + " − " + (-tc(b, n)) + ". Going all the way around once (" + N + " steps) changes nothing.</div>";
+      if (W.read !== "u") {
+        var red = crossedRed(a, b, N), yn = function (x) { return x ? "<b>yes</b>" : "no"; };
+        html += "<div style='margin-top:6px'><b>Overflow check:</b> crossed the red line (carry <i>into</i> the leftmost bit)? " + yn(red) +
+          ". &nbsp;Crossed the top (carry <i>out</i>)? " + yn(carry) + ". &nbsp;" +
+          (red === carry ? (red ? "Both: the two carries cancel, so <b>no overflow</b>." : "Neither: <b>no overflow</b>.")
+            : "Only one: nothing cancels it, so <b>overflow</b>.") + "</div>";
+        html += "<div class='note'>Range for " + n + " bits: " + fmt(lo) + " to " + hi + ".</div>";
+      }
     } else if (!W.path) {
-      html += "<div class='note' style='margin-top:6px'>Press <b>Add A + B</b>. The orange path moves by B: clockwise for a positive B, counterclockwise for a negative B (in two's complement).</div>";
+      html += "<div class='note' style='margin-top:6px'>Press <b>Add A + B</b>. The orange path is what the adder does: it always moves <b>clockwise</b> by B's bits read as unsigned. Passing the top (all 1's → all 0's) is the carry out.</div>";
     }
     out.innerHTML = html;
   }
@@ -448,7 +491,8 @@
   $("lpad").onchange = function () { L.pad = this.value; drawLine(); };
 
   /* ================= COMPARE SCHEMES ================= */
-  var C = { n: 3, x: 3, y: -3 };
+  var C = { n: 3, x: 3, y: -3, stage: 0, prog: 0, timer: null };
+  // stages: 0 = X, 1 = Y's bits, 2 = the adder moves (animated), 3 = land, read, check
   var SCHEMES = [
     { key: "sm", name: "Sign-magnitude",
       enc: function (v, n) { return v >= 0 ? v : (1 << (n - 1)) | -v; },
@@ -502,16 +546,21 @@
           fill: color }, svg);
       }
       el("circle", { cx: cx0, cy: cx0, r: Rm, fill: "none", stroke: "var(--faint)", "stroke-width": 2 }, svg);
+      var st = C.stage, moved = st >= 3 ? yb : st === 2 ? Math.min(C.prog, yb) : 0, landed = st >= 3;
       // what the adder does: start at X, count forward (clockwise) by Y's bits read as unsigned
-      if (yb > 0) arc(xb, yb, Rm - 32, "var(--path)", false);
+      if (moved > 0.02) arc(xb, moved, Rm - 32, "var(--path)", false);
+      if (st === 2 && yb > 0) {      // the moving dot
+        var pm = P(xb + moved, Rm); el("circle", { cx: pm[0], cy: pm[1], r: 9, fill: "var(--path)", stroke: "var(--bg)", "stroke-width": 2 }, svg);
+      }
       // two's complement with a negative Y: the same landing spot as going back |Y| (subtracting)
-      if (s.key === "tc" && C.y < 0) arc(xb, C.y, Rm - 52, "var(--wrap)", true);
+      if (landed && s.key === "tc" && C.y < 0) arc(xb, C.y, Rm - 52, "var(--wrap)", true);
       // the correct answer's pattern: green ring
-      if (wb != null) { var pw = P(wb, Rm); el("circle", { cx: pw[0], cy: pw[1], r: 12, fill: "none", stroke: "var(--wrap)", "stroke-width": 3 }, svg); }
+      if (landed && wb != null) { var pw = P(wb, Rm); el("circle", { cx: pw[0], cy: pw[1], r: 12, fill: "none", stroke: "var(--wrap)", "stroke-width": 3 }, svg); }
       for (var k = 0; k < N; k++) {
         var p = P(k, Rm), po = P(k, Rm + 22), pi = P(k, Rm - 16), v = s.dec(k, n);
-        var col = k === rb ? "var(--path)" : k === xb ? "var(--pos)" : k === yb ? "var(--hl)" : "var(--line)";
-        var big = k === rb || k === xb || k === yb;
+        var isR = landed && k === rb, isY = st >= 1 && k === yb;
+        var col = isR ? "var(--path)" : k === xb ? "var(--pos)" : isY ? "var(--hl)" : "var(--line)";
+        var big = isR || k === xb || isY;
         el("circle", { cx: p[0], cy: p[1], r: big ? 7 : 4, fill: col, stroke: "var(--bg)", "stroke-width": 1.5 }, svg);
         el("text", { x: po[0], y: po[1] + 4, "text-anchor": "middle", "font-size": 11.5, class: "m" }, svg, bin(k, n));
         var tx = el("text", { x: pi[0], y: pi[1] + 4, "text-anchor": "middle", "font-size": 13, "font-weight": 700 }, svg, show(v));
@@ -519,20 +568,28 @@
         // name tags outside the bit labels
         var tags = [];
         if (k === xb) tags.push("X");
-        if (k === yb) tags.push("Y");
-        if (k === rb) tags.push("lands");
+        if (isY) tags.push("Y");
+        if (isR) tags.push("lands");
         if (tags.length) {
           var pt2 = P(k, Rm + 46);
           var tg = el("text", { x: pt2[0], y: pt2[1] + 4, "text-anchor": "middle", "font-size": 12, "font-weight": 700 }, svg, tags.join(", "));
-          tg.setAttribute("style", "fill:" + (k === rb ? "var(--path)" : k === xb ? "var(--pos)" : "var(--ink)"));
+          tg.setAttribute("style", "fill:" + (isR ? "var(--path)" : k === xb ? "var(--pos)" : "var(--ink)"));
         }
       }
       var got = s.dec(rb, n);
       var right = got === want, sortOf = got === "−0" && want === 0;
       var sum = document.createElement("div"); sum.className = "sum";
-      sum.textContent = "  " + bin(xb, n) + "   (" + fmt(C.x) + ")\n+ " + bin(yb, n) + "   (" + fmt(C.y) + ")\n" +
-        (carry ? "1" : " ") + " " + bin(rb, n) + "   reads as " + show(got);
+      sum.textContent = "  " + bin(xb, n) + "   (X = " + fmt(C.x) + ")" +
+        (st >= 1 ? "\n+ " + bin(yb, n) + "   (Y = " + fmt(C.y) + "; as unsigned: " + yb + ")" : "") +
+        (landed ? "\n" + (carry ? "1" : " ") + " " + bin(rb, n) + "   reads as " + show(got) : "");
       panel.appendChild(sum);
+      if (st === 2) {
+        var mv = document.createElement("div"); mv.className = "note";
+        mv.innerHTML = yb === 0 ? "Y's bits are all 0: no move." : "Moving clockwise: <b>" + Math.floor(Math.min(C.prog, yb) + 1e-9) + " of " + yb + "</b> steps" +
+          (carry && C.prog >= yb ? " (we passed the top, " + bin(mask, n) + " → " + bin(0, n) + ": that's the carry we drop)" : "") + ".";
+        panel.appendChild(mv);
+      }
+      if (!landed) { box.appendChild(panel); return; }
       var verdict = document.createElement("div");
       verdict.innerHTML = right ? "<span class='flag ok'>correct: " + fmt(want) + "</span>"
         : sortOf ? "<span class='flag' style='color:var(--path);border:1.5px solid var(--path)'>sort of: landed on −0, a second zero</span>"
@@ -555,13 +612,38 @@
       html += "</tr>";
     }
     $("ctable").innerHTML = html + "</table>";
+    var say = [
+      "<b>Step 1 of 4.</b> Here is X = " + fmt(C.x) + " in each scheme. Same number, different bits.",
+      "<b>Step 2 of 4.</b> Here is Y = " + fmt(C.y) + ". Each scheme writes it with its own bits. The adder doesn't know about schemes: it just sees Y's bits as an ordinary unsigned number.",
+      "<b>Step 3 of 4.</b> The adder adds. On the wheel: start at X and move <b>clockwise</b> one step at a time, as many steps as Y's bits say (read as unsigned). Going past the top is the carry we drop.",
+      "<b>Step 4 of 4.</b> Where did we land? Read those bits in the same scheme. The green ring is the right answer: did the adder get there?"
+    ];
+    $("cstep").innerHTML = say[C.stage];
+    $("cback").disabled = C.stage === 0;
+    $("cfwd").disabled = C.stage === 3;
   }
+  function cStop() { if (C.timer) { cancelAnimationFrame(C.timer); C.timer = null; } }
+  function cStage(k) {
+    cStop(); C.stage = k; C.prog = 0;
+    if (k !== 2) { drawCompare(); return; }
+    var maxY = Math.max.apply(null, SCHEMES.map(function (s) { return s.enc(C.y, C.n); })), t0 = null, PER = Math.min(450, 4000 / Math.max(1, maxY));
+    function tick(now) {
+      if (t0 === null) t0 = now;
+      C.prog = Math.min(maxY, (now - t0) / PER);
+      drawCompare();
+      if (C.prog < maxY) C.timer = requestAnimationFrame(tick); else C.timer = null;
+    }
+    C.timer = requestAnimationFrame(tick);
+  }
+  $("cfwd").onclick = function () { if (C.stage < 3) cStage(C.stage + 1); };
+  $("cback").onclick = function () { if (C.stage > 0) cStage(C.stage - 1); };
+  $("call").onclick = function () { cStage(3); };
 
-  $("cn").onchange = function () { C.n = +this.value; fillValueSelects(); drawCompare(); };
-  $("cx").onchange = function () { C.x = +this.value; drawCompare(); };
-  $("cy").onchange = function () { C.y = +this.value; drawCompare(); };
+  $("cn").onchange = function () { C.n = +this.value; fillValueSelects(); cStage(0); };
+  $("cx").onchange = function () { C.x = +this.value; cStage(0); };
+  $("cy").onchange = function () { C.y = +this.value; cStage(0); };
   Array.prototype.forEach.call(document.querySelectorAll("#cmpView button[data-x]"), function (b) {
-    b.onclick = function () { C.x = +b.dataset.x; C.y = +b.dataset.y; $("cx").value = C.x; $("cy").value = C.y; drawCompare(); };
+    b.onclick = function () { C.x = +b.dataset.x; C.y = +b.dataset.y; $("cx").value = C.x; $("cy").value = C.y; cStage(0); };
   });
 
   /* ---------- init ---------- */
