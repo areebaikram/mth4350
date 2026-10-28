@@ -224,6 +224,20 @@
 
   // does a clockwise path of k steps from `start` pass the red line (between 01..1 and 10..0)?
   function crossedRed(start, k, N) { return ((N / 2 - start - 1) % N + N) % N + 1 <= k; }
+  // does a path of k steps BACK (counterclockwise) from `start` pass the red line?
+  function crossedRedBack(start, k, N) { return ((start - N / 2) % N + N) % N + 1 <= k; }
+  // overflow happens exactly when the REAL path crosses the red line:
+  // forward B steps if B >= 0, back |B| steps (the dashed path) if B < 0
+  function realCrossesRed(a, b, n) {
+    var N = 1 << n, B = tc(b, n);
+    return B >= 0 ? crossedRed(a, B, N) : crossedRedBack(a, -B, N);
+  }
+  // carries[i] = the carry INTO bit i (carries[n] = the carry out)
+  function carries(a, b, n) {
+    var c = [0];
+    for (var i = 0; i < n; i++) c.push(((a >> i) & 1) + ((b >> i) & 1) + c[i] >= 2 ? 1 : 0);
+    return c;
+  }
 
   function drawWheel() {
     var svg = $("wheel"); svg.innerHTML = "";
@@ -258,10 +272,12 @@
           var tc0 = pt(N - 0.5, N, R + 58);
           el("text", { x: tc0[0], y: tc0[1] + 4, "text-anchor": "middle", "font-size": 14, "font-weight": 700, style: "fill:var(--wrap)" }, svg, "carry out!");
         }
-        // passed the red line (0111 -> 1000): a carry INTO the leftmost bit
-        if (W.read !== "u" && crossedRed(W.path.start, k, N)) {
+        // the real path crossed the red line (0111 | 1000): two's complement overflow.
+        // For negative B the real path is the dashed one, so wait until it is drawn.
+        var Bs = tc(W.b, n);
+        if (W.read !== "u" && (Bs >= 0 ? crossedRed(W.path.start, k, N) : W.shown >= W.b && realCrossesRed(W.path.start, W.b, n))) {
           var tr0 = pt(N / 2 - 0.5, N, R + 62);
-          el("text", { x: tr0[0], y: tr0[1] + 4, "text-anchor": "middle", "font-size": 14, "font-weight": 700, style: "fill:var(--ovf)" }, svg, "carry into leftmost bit!");
+          el("text", { x: tr0[0], y: tr0[1] + 4, "text-anchor": "middle", "font-size": 14, "font-weight": 700, style: "fill:var(--ovf)" }, svg, "crossed the red line: overflow!");
         }
       }
       // after landing, in two's complement with a negative B: the same spot as going back |B| (subtracting)
@@ -315,7 +331,9 @@
       var r = (a + b) % N, carry = a + b >= N, ts = tc(a, n) + tc(b, n);
       var lo = -(N >> 1), hi = (N >> 1) - 1, ovf = ts < lo || ts > hi;
       html += "<hr style='border:0;border-top:1px solid var(--faint)'>";
-      html += "<div class='mono' style='white-space:pre;font-size:1.05rem'>  " + bin(a, n) + "\n+ " + bin(b, n) + "\n" +
+      var cs = carries(a, b, n), crow = "";
+      for (var ci = n - 1; ci >= 0; ci--) crow += cs[ci] ? (ci === n - 1 ? "<b style='color:var(--ovf)'>1</b>" : "1") : " ";
+      html += "<div class='mono' style='white-space:pre;font-size:1.05rem'>  " + crow + "   <span style='font-family:inherit;font-size:.85rem;color:var(--muted)'>← carries</span>\n  " + bin(a, n) + "\n+ " + bin(b, n) + "\n" +
         (carry ? "1" : " ") + " " + bin(r, n) + (carry ? "   ← carry out dropped" : "") + "</div>";
       if (W.read !== "tc") html += "<div><b>Unsigned:</b> " + a + " + " + b + " = " + (a + b) + "; the bits read " + r + ". " +
         (carry ? "<span class='flag ovf'>carry out: wrong</span>" : "<span class='flag ok'>correct</span>") + "</div>";
@@ -326,11 +344,13 @@
       if (W.read !== "u" && tc(b, n) < 0) html += "<div class='note' style='color:var(--wrap)'>Dashed: landing in the same place as moving " + (-tc(b, n)) +
         (tc(b, n) === -1 ? " step" : " steps") + " <b>back</b>, i.e. subtracting " + (-tc(b, n)) + ", since " + b + " = " + N + " − " + (-tc(b, n)) + ". Going all the way around once (" + N + " steps) changes nothing.</div>";
       if (W.read !== "u") {
-        var red = crossedRed(a, b, N), yn = function (x) { return x ? "<b>yes</b>" : "no"; };
-        html += "<div style='margin-top:6px'><b>Overflow check:</b> crossed the red line (carry <i>into</i> the leftmost bit)? " + yn(red) +
-          ". &nbsp;Crossed the top (carry <i>out</i>)? " + yn(carry) + ". &nbsp;" +
-          (red === carry ? (red ? "Both: the two carries cancel, so <b>no overflow</b>." : "Neither: <b>no overflow</b>.")
+        var cin = cs[n - 1] === 1, yn = function (x) { return x ? "<b>yes</b>" : "no"; };
+        html += "<div style='margin-top:6px'><b>Overflow check with carries:</b> carry <i>into</i> the leftmost bit? " + yn(cin) +
+          ". &nbsp;Carry <i>out</i> of it? " + yn(carry) + ". &nbsp;" +
+          (cin === carry ? (cin ? "Both: the two carries cancel, so <b>no overflow</b>." : "Neither: <b>no overflow</b>.")
             : "Only one: nothing cancels it, so <b>overflow</b>.") + "</div>";
+        html += "<div><b>Overflow check on the wheel:</b> the real path (" + (tc(b, n) < 0 ? "dashed, " + (-tc(b, n)) + " back" : "orange, " + b + " forward") +
+          ") " + (realCrossesRed(a, b, n) ? "<b>crosses</b> the red line, so <b>overflow</b>." : "does not cross the red line, so <b>no overflow</b>.") + "</div>";
         html += "<div class='note'>Range for " + n + " bits: " + fmt(lo) + " to " + hi + ".</div>";
       }
     } else if (!W.path) {
