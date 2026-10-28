@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Floating Point Addition</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f4f3f7; --card: #ffffff; --ink: #1a1a1a; --muted: #5a5a66;
+    --line: #8a8a96; --faint: #d4d4dc; --hl: #ffd84d;
+    --a: #1464d2; --a-soft: #e1ecfb; --b: #11804a; --b-soft: #dcf3e6;
+    --red: #c62828; --red-soft: #fde0dc; --win: #ffd84d;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+      --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d;
+      --a: #85b6ff; --a-soft: #1c2e4d; --b: #5fd39a; --b-soft: #1b3d2b;
+      --red: #ff7b6b; --red-soft: #4a2420; --win: #ffd84d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+    --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d;
+    --a: #85b6ff; --a-soft: #1c2e4d; --b: #5fd39a; --b-soft: #1b3d2b;
+    --red: #ff7b6b; --red-soft: #4a2420; --win: #ffd84d;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 12px 16px 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 17px; line-height: 1.45; overflow-x: hidden;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 0 0 8px; }
+  .mono { font-family: var(--mono); }
+  .note { color: var(--muted); font-size: .92rem; }
+  .panel { background: var(--panel); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  input[type=text] { font: inherit; font-family: var(--mono); width: 8em; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  input.bad { border-color: var(--red); }
+  select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  button.act { font: inherit; font-size: .92rem; padding: 4px 11px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); cursor: pointer; }
+  button.act:hover { border-color: var(--ink); }
+  button.main { font-weight: 700; background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button:disabled { opacity: .4; cursor: default; }
+  .hide { display: none !important; }
+  .focus { background: var(--card); border: 2px solid var(--faint); border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; }
+  .lbl { font-size: .85rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .say { font-size: 1.08rem; margin: 4px 0; }
+  .done-line { margin: 2px 0; font-size: 1rem; }
+  .done-line .ck { color: var(--b); font-weight: 700; margin-right: 6px; }
+  details { background: var(--panel); border-radius: 10px; margin-bottom: 10px; }
+  details > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; }
+  details > div { padding: 0 14px 12px; }
+
+  /* the bit grid */
+  .gridwrap { display: flex; gap: 10px; align-items: flex-start; }
+  .rowlabels { flex: none; }
+  .rowlabels div { font-family: var(--mono); font-size: .95rem; white-space: nowrap; display: flex; align-items: center; justify-content: flex-end; }
+  .more { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: .78rem; color: var(--muted); margin: 0 2px; }
+  .scroller { overflow-x: auto; flex: 1; padding-bottom: 4px; }
+  .grid { position: relative; }
+  .box { position: absolute; display: flex; align-items: center; justify-content: center; font-family: var(--mono);
+    border-radius: 4px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink);
+    transition: left .9s ease-in-out, background-color .4s, color .4s, border-color .4s, opacity .4s; }
+  .box.ra { border-color: var(--a); } .box.ra.one { background: var(--a-soft); font-weight: 700; }
+  .box.rb { border-color: var(--b); } .box.rb.one { background: var(--b-soft); font-weight: 700; }
+  .box.rs { border-color: var(--ink); } .box.rs.one { background: var(--panel); font-weight: 700; }
+  .box.zero-out { opacity: .3; }
+  .box.lost { background: var(--red-soft) !important; color: var(--red); border-color: var(--red) !important; font-weight: 700; }
+  .band { position: absolute; border: 2.5px solid var(--win); background: color-mix(in srgb, var(--win) 14%, transparent); border-radius: 6px;
+    transition: left .7s ease-in-out, width .7s; }
+  .bandlbl { position: absolute; font-size: .8rem; font-weight: 700; white-space: nowrap; transition: left .7s ease-in-out; }
+  .pt { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); transition: left .7s ease-in-out; }
+  .gap { position: absolute; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .8rem; text-align: center; line-height: 1.1; }
+  .colhead { position: absolute; font-size: .72rem; color: var(--muted); text-align: center; }
+  .sumline { position: absolute; height: 0; border-top: 2px solid var(--ink); }
+  .carrybit { position: absolute; font-family: var(--mono); font-size: .75rem; color: var(--muted); text-align: center; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .88rem; color: var(--muted); margin-top: 8px; }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 4px; border: 1.5px solid; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Floating Point Addition, Step by Step</h1>
+
+  <div class="panel row">
+    <label for="ina"><b>A:</b></label><input type="text" id="ina" value="15">
+    <label for="inb"><b>B:</b></label><input type="text" id="inb" value="0.1875">
+    <label for="prec"><b>Keep:</b></label>
+    <select id="prec">
+      <option value="4" selected>4 significant bits (to see the idea)</option>
+      <option value="24">24 significant bits (IEEE single)</option>
+      <option value="53">53 significant bits (IEEE double)</option>
+    </select>
+  </div>
+  <div class="panel row" style="padding-top:8px; padding-bottom:8px">
+    <span class="note">Try:</span><span class="row" id="presets" style="gap:5px"></span>
+  </div>
+
+  <div class="panel">
+    <div class="gridwrap">
+      <div class="rowlabels" id="labels"></div>
+      <div class="scroller" id="scroller"><div class="grid" id="grid"></div></div>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="border-color:var(--win); background:color-mix(in srgb, var(--win) 14%, transparent)"></span>the bits we can keep</span>
+      <span><span class="sw" style="border-color:var(--red); background:var(--red-soft)"></span>a 1 that falls past the edge</span>
+      <span>● the binary point</span>
+    </div>
+  </div>
+
+  <div class="focus">
+    <div id="done"></div>
+    <div id="now" style="margin-top:6px"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="act" id="back">◀ Back</button>
+      <button class="act main" id="next">Next step ▶</button>
+      <button class="act" id="replay">↻ Replay</button>
+    </div>
+  </div>
+
+  <details>
+    <summary>Exact answer vs. stored answer</summary>
+    <div id="exact"></div>
+  </details>
+</div>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function sup(n) { return "<sup>" + String(n).replace(/^-/, "−") + "</sup>"; }
+
+  /* ---------- numbers as (sign, M, e): value = ±M × 2^(e - (P-1)), with M a P-bit integer ---------- */
+  var P = 4;
+  function roundHalfEven(v) { var f = Math.floor(v), d = v - f; return d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1); }
+  function toP(x) {
+    // round x to P significant bits; returns {s, M (BigInt), e} or null for 0
+    if (x === 0) return null;
+    var a = Math.abs(x), e = Math.floor(Math.log2(a));
+    if (Math.pow(2, e) > a) e--; if (Math.pow(2, e + 1) <= a) e++;
+    var m = roundHalfEven(a * Math.pow(2, P - 1 - e));
+    if (m >= Math.pow(2, P)) { m /= 2; e++; }
+    return { s: x < 0 ? 1 : 0, M: BigInt(m), e: e };
+  }
+  function bits(M, n) { var t = M.toString(2); return t.padStart(n, "0"); }
+  function pow2dec(S, u) {
+    // exact decimal string of S × 2^u (S a non-negative BigInt)
+    if (u >= 0) return (S << BigInt(u)).toString();
+    var n = S * 5n ** BigInt(-u), t = n.toString().padStart(-u + 1, "0");
+    var ip = t.slice(0, t.length + u), fp = t.slice(t.length + u).replace(/0+$/, "");
+    return ip + (fp ? "." + fp : "");
+  }
+  function shortDec(str) {
+    // shorten a long exact decimal for display
+    var m = str.match(/^(\d+)(?:\.(\d+))?$/); if (!m) return str;
+    var ip = m[1], fp = m[2] || "";
+    function mant(d0, rest) { rest = rest.slice(0, 8).replace(/0+$/, ""); return d0 + (rest ? "." + rest : ""); }
+    if (ip.length > 15) return mant(ip[0], ip.slice(1) + fp) + " × 10" + sup(ip.length - 1);
+    if (ip === "0" && /^0{5,}/.test(fp)) { var z = fp.match(/^0*/)[0].length; return mant(fp[z], fp.slice(z + 1)) + " × 10" + sup(-(z + 1)); }
+    if (fp.length > 14) return ip + "." + fp.slice(0, 14) + "<span class='more'>(+" + (fp.length - 14) + " more digits)</span>";
+    return str;
+  }
+  function binForm(n) {
+    // n = {s, M, e} → "1.xxx × 2^e" with trailing zeros dropped
+    // too long to show: first 8 bits, then say in words how many more (no "…", which would look like it never ends)
+    var b = bits(n.M, P), f = b.slice(1).replace(/0+$/, ""), more = "";
+    if (f.length > 10) {
+      more = "<span class='more'>(+" + (f.length - 8) + " more bits" + (f.length < P - 1 ? ", then 0s" : "") + ")</span>";
+      f = f.slice(0, 8);
+    }
+    return (n.s ? "−" : "") + "1." + (f || "0") + more + "<sub>2</sub> × 2" + sup(n.e);
+  }
+  function hasLongLabel() { return P > 11 || W.d > 8; }
+
+  /* ---------- the whole computation ---------- */
+  var W = {};        // everything about the current problem
+  function setup() {
+    P = +$("prec").value;
+    var xa = parseNum($("ina").value), xb = parseNum($("inb").value);
+    $("ina").classList.toggle("bad", xa === null); $("inb").classList.toggle("bad", xb === null);
+    if (xa === null || xb === null || xa === 0 || xb === 0) { W = null; drawAll(); return; }
+    var A = toP(xa), B = toP(xb);
+    // the one with the bigger exponent goes on top
+    var swap = B.e > A.e || (B.e === A.e && B.M > A.M);
+    var big = swap ? B : A, small = swap ? A : B, d = big.e - small.e;
+    // exact sum, in units of 2^(small.e - (P-1)): the smallest bit anywhere
+    var u = small.e - (P - 1);
+    var Big = big.M << BigInt(d), Sm = small.M, sameSign = big.s === small.s;
+    var S = sameSign ? Big + Sm : Big - Sm;           // big is bigger in size, so S >= 0
+    var res = null;
+    if (S > 0n) {
+      var top = S.toString(2).length - 1;              // leading bit position, in units of 2^u
+      var kS = top + u;                                 // its place value
+      var drop = top - (P - 1);                         // how many bits fall off the right end
+      var R, roundedUp = false, kept;
+      if (drop <= 0) { R = S << BigInt(-drop); kept = R; }
+      else {
+        var q = S >> BigInt(drop), rem = S - (q << BigInt(drop)), half = 1n << BigInt(drop - 1);
+        R = (rem > half || (rem === half && (q & 1n))) ? q + 1n : q;
+        roundedUp = R !== q; kept = q;
+      }
+      var kRes = kS;
+      if (R >= (1n << BigInt(P))) { R >>= 1n; kRes++; }  // rounding up made it 10.000…
+      res = { s: big.s, M: R, e: kRes, kS: kS, drop: drop, roundedUp: roundedUp, rem: drop > 0 ? S - (kept << BigInt(drop)) : 0n };
+    }
+    W = { xa: xa, xb: xb, A: A, B: B, big: big, small: small, swap: swap, d: d, u: u, S: S, sameSign: sameSign, res: res };
+    W.step = 1;
+    drawAll();
+  }
+  function parseNum(t) {
+    t = t.trim().replace(/−/g, "-").replace(/\s/g, "");
+    var m = t.match(/^([+-]?)2\^([+-]?\d+)$/);
+    if (m) return (m[1] === "-" ? -1 : 1) * Math.pow(2, +m[2]);
+    if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(t)) return null;
+    return parseFloat(t);
+  }
+
+  /* ---------- drawing the grid ---------- */
+  // Columns are place values k (2^k), from big.e + 1 (room for a carry) down to the smallest bit of the small number.
+  // If the small number slides very far, the empty middle is squeezed into one "gap" column.
+  var CW, CH = 34, GAPW = 70;
+  function layout() {
+    CW = P <= 8 ? 32 : P <= 24 ? 24 : 18;
+    var hi = W.big.e + 1, winLo = W.big.e - (P - 1), lo = W.small.e - (P - 1);
+    var gap = (winLo - 3) > W.small.e + 1;            // the small number starts well past the edge
+    if (W.res) lo = Math.min(lo, W.res.e - (P - 1));
+    var L = { hi: hi, lo: lo, gap: gap, gapHi: winLo - 3, gapLo: W.small.e + 1 };
+    // keep the result's extra bits visible too
+    return L;
+  }
+  function xOf(L, k) {
+    if (!L.gap || k >= L.gapHi) return (L.hi - k) * CW;
+    var before = (L.hi - L.gapHi + 1) * CW;
+    if (k >= L.gapLo) return before;                  // inside the gap (not drawn)
+    return before + GAPW + (L.gapLo - 1 - k) * CW;
+  }
+  function inGap(L, k) { return L.gap && k < L.gapHi && k >= L.gapLo; }
+  function gridWidth(L) { return xOf(L, L.lo) + CW; }
+
+  var ROWS = { head: 0, a: 22, b: 22 + 60, line: 22 + 60 + 34 + 8, s: 22 + 60 + 34 + 18, r: 22 + 60 + 34 + 18 + 52 };
+  function drawAll() {
+    var g = $("grid"), lab = $("labels");
+    g.innerHTML = ""; lab.innerHTML = "";
+    if (!W) { $("now").innerHTML = "<div class='say'>Type two numbers that are not 0.</div>"; $("done").innerHTML = ""; $("exact").innerHTML = ""; return; }
+    var L = layout(), st = W.step, big = W.big, small = W.small;
+    var height = st >= 5 ? ROWS.r + CH + 6 : st >= 3 ? ROWS.s + CH + 6 : ROWS.b + CH + 6;
+    g.style.width = gridWidth(L) + "px"; g.style.height = height + "px";
+
+    // the window of bits we keep: on the big number at first, on the sum once we normalize
+    var winHiK = st >= 4 && W.res ? W.res.kS : big.e, winLoK = winHiK - (P - 1);
+    var band = document.createElement("div"); band.className = "band";
+    band.style.left = (xOf(L, winHiK) - 3) + "px"; band.style.width = (xOf(L, winLoK) - xOf(L, winHiK) + CW + 6) + "px";
+    band.style.top = (ROWS.a - 6) + "px"; band.style.height = (height - ROWS.a + 2) + "px";
+    g.appendChild(band);
+    var bl = document.createElement("div"); bl.className = "bandlbl"; bl.style.left = xOf(L, winHiK) + "px"; bl.style.top = "0px";
+    bl.textContent = "keep " + P + " bits"; g.appendChild(bl);
+    if (P <= 8) for (var k = L.hi; k >= L.lo; k--) if (!inGap(L, k)) {
+      var h = document.createElement("div"); h.className = "colhead"; h.style.left = xOf(L, k) + "px"; h.style.width = CW + "px";
+      h.style.top = (ROWS.a + CH + 5) + "px"; h.innerHTML = k === L.hi ? "" : "2" + sup(k);
+      g.appendChild(h);
+    }
+    if (L.gap) {
+      var gp = document.createElement("div"); gp.className = "gap";
+      gp.style.left = xOf(L, L.gapLo) + "px"; gp.style.width = GAPW + "px"; gp.style.top = ROWS.a + "px"; gp.style.height = (CH * 2 + 12) + "px";
+      gp.innerHTML = "⋯<br>" + (L.gapHi - L.gapLo) + " more<br>places<br>⋯"; g.appendChild(gp);
+    }
+    function outside(k) { return k > winHiK || k < winLoK; }
+    function box(row, cls, k, b, startLeft) {
+      if (inGap(L, k)) return;
+      var e = document.createElement("div"); e.className = "box " + cls + (b ? " one" : "");
+      e.style.width = (CW - 3) + "px"; e.style.height = CH + "px"; e.style.top = ROWS[row] + "px";
+      e.style.left = (startLeft != null ? startLeft : xOf(L, k)) + "px"; e.style.fontSize = (CW >= 24 ? 1 : .8) + "rem";
+      e.textContent = b; e.dataset.k = k; e.dataset.b = b;
+      g.appendChild(e); return e;
+    }
+    function point(row, kAfter) {
+      var p = document.createElement("div"); p.className = "pt";
+      p.style.left = (xOf(L, kAfter) + CW - 4) + "px"; p.style.top = (ROWS[row] + CH - 6) + "px"; g.appendChild(p);
+    }
+
+    // row A: the bigger number
+    var bb = bits(big.M, P);
+    for (var i = 0; i < P; i++) box("a", "ra", big.e - i, bb[i]);
+    point("a", big.e);
+    // row B: the smaller number. Step 1: under A (not lined up). Step 2+: slid right by d.
+    var sb = bits(small.M, P), bBoxes = [];
+    for (var j = 0; j < P; j++) {
+      if (st === 1) box("b", "rb", big.e - j, sb[j]);           // step 1: lined up by the leading 1
+      else {
+        var bx = box("b", "rb", small.e - j, sb[j], W.animate ? xOf(L, big.e - j) : null);
+        if (bx) bBoxes.push(bx);
+      }
+    }
+    point("b", st === 1 ? big.e : big.e);
+
+    // labels on the left
+    var labs = [];
+    var nameBig = W.swap ? "B" : "A", nameSmall = W.swap ? "A" : "B";
+    labs.push([ROWS.a, nameBig + " = " + binForm(big)]);
+    var shifted = W.d === 0 ? binForm(small) : (small.s ? "−" : "") + (W.d <= 8 && P <= 8 ?
+      "0." + "0".repeat(W.d - 1) + bits(small.M, P).replace(/0+$/, "") :
+      "0.<span class='more'>(" + (W.d - 1) + " zeros, then " + nameSmall + "'s bits)</span>") + "<sub>2</sub> × 2" + sup(big.e);
+    labs.push([ROWS.b, nameSmall + " = " + (st === 1 ? binForm(small) : shifted)]);
+    if (st >= 3) labs.push([ROWS.s, (W.sameSign ? "sum" : "difference")]);
+    if (st >= 5 && W.res) labs.push([ROWS.r, "stored"]);
+    lab.style.position = "relative"; lab.style.height = height + "px";
+    lab.style.width = hasLongLabel() ? "330px" : "240px";
+    labs.forEach(function (l) {
+      var dv = document.createElement("div"); dv.style.position = "absolute"; dv.style.right = "0"; dv.style.top = l[0] + "px"; dv.style.height = CH + "px";
+      dv.style.display = "flex"; dv.style.alignItems = "center";
+      dv.innerHTML = "<span>" + l[1] + "</span>"; lab.appendChild(dv);
+    });
+
+    // row S: the exact sum (all its bits, before rounding)
+    if (st >= 3) {
+      var ln = document.createElement("div"); ln.className = "sumline"; ln.style.left = "0"; ln.style.width = gridWidth(L) + "px"; ln.style.top = ROWS.line + "px"; g.appendChild(ln);
+      var sStr = W.S.toString(2), topK = sStr.length - 1 + W.u;
+      if (W.S === 0n) box("s", "rs", big.e, "0");
+      for (var q = 0; q < sStr.length; q++) box("s", "rs", topK - q, sStr[q]);
+      // zeros to the left of the leading 1 that sit inside the window (after a cancellation)
+      for (var kz = big.e; kz > topK; kz--) box("s", "rs zero-out", kz, "0");
+      point("s", st >= 4 && W.res ? W.res.kS : big.e);
+    }
+    // row R: what is stored after rounding
+    if (st >= 5 && W.res) {
+      var rb = bits(W.res.M, P);
+      for (var r = 0; r < P; r++) box("r", "rs", W.res.e - r, rb[r]);
+      point("r", W.res.e);
+    }
+
+    // red: a 1 outside the window (from step 2 on, after the slide finishes)
+    function markLost() {
+      if (st < 2) return;
+      g.querySelectorAll(".box").forEach(function (e) {
+        var k = +e.dataset.k;
+        var isSum = e.style.top === ROWS.s + "px", isStored = e.style.top === ROWS.r + "px";
+        if (isStored) return;
+        if (st >= 4 && !isSum) return;
+        if (outside(k) && e.dataset.b === "1") e.classList.add("lost");
+        else if (outside(k)) e.classList.add("zero-out");
+      });
+    }
+    if (W.animate && st === 2) {
+      requestAnimationFrame(function () { requestAnimationFrame(function () {
+        bBoxes.forEach(function (e) { e.style.left = xOf(L, +e.dataset.k) + "px"; });
+        var sc = $("scroller"), want = xOf(L, small.e) - sc.clientWidth / 2;
+        if (want > 0) setTimeout(function () { sc.scrollTo({ left: want, behavior: "smooth" }); }, 300);
+        setTimeout(markLost, 950);
+      }); });
+    } else markLost();
+    W.animate = false;
+
+    explain(L);
+    // keep the window in view
+    var sc = $("scroller"); if (st <= 1) sc.scrollLeft = 0;
+  }
+
+  /* ---------- the words for each step ---------- */
+  function explain(L) {
+    var st = W.step, big = W.big, small = W.small, d = W.d, res = W.res;
+    var nb = W.swap ? "B" : "A", ns = W.swap ? "A" : "B";
+    var lostBits = bits(small.M, P).split("").filter(function (b, j) { return small.e - j < big.e - (P - 1) && b === "1"; }).length;
+    var T = [
+      ["Write both numbers in normalized binary",
+       "<div class='say'>" + nb + " = " + binForm(big) + " and " + ns + " = " + binForm(small) + ".</div>" +
+       ((W.A.M !== null && Number(W.A.M) * Math.pow(2, W.A.e - (P - 1)) * (W.A.s ? -1 : 1) !== W.xa) || (Number(W.B.M) * Math.pow(2, W.B.e - (P - 1)) * (W.B.s ? -1 : 1) !== W.xb) ?
+         "<div class='note'>(With only " + P + " significant bits, the numbers you typed were already rounded a little.)</div>" : "") +
+       "<div class='say'>The bits are lined up by their leading 1, but the exponents are different (" + big.e + " and " + small.e + "). We can't add them like this.</div>"],
+      ["Make the exponents match",
+       "<div class='say'>Rewrite " + ns + " with exponent " + big.e + ": its bits slide <b>" + d + " place" + (d === 1 ? "" : "s") + " to the right</b>.</div>" +
+       (lostBits ? "<div class='say'>Only " + P + " bits fit. <b style='color:var(--red)'>The red bits slid past the edge.</b>" +
+         (lostBits === P ? " That's <b>all</b> of " + ns + "!" : "") + "</div>" : "<div class='say'>Every bit of " + ns + " still fits. Nothing is lost.</div>")],
+      [W.sameSign ? "Add" : "Subtract",
+       "<div class='say'>" + (W.sameSign ? "Add" : "Subtract") + " the lined-up bits, the usual way. (The hardware keeps a few extra bits while it works, so we keep the red ones for now.)</div>"],
+      ["Normalize",
+       !res ? "<div class='say'>The answer is exactly 0.</div>" :
+       res.kS === big.e ? "<div class='say'>The answer already has its leading 1 in the right place: nothing to move.</div>" :
+       res.kS > big.e ? "<div class='say'>The sum got a carry: it's 1x.xxx. Move the point <b>1 place left</b> and add 1 to the exponent. The window of kept bits moves with it.</div>" :
+       "<div class='say'>The leading bits cancelled. Move the point <b>" + (big.e - res.kS) + " place" + (big.e - res.kS === 1 ? "" : "s") + " right</b> so it starts with 1 again. The window moves with it.</div>"],
+      ["Round",
+       !res ? "<div class='say'>0 is stored exactly.</div>" :
+       "<div class='say'>Keep " + P + " bits. " + (res.drop <= 0 ? "Nothing falls off." :
+         res.rem === 0n ? "The bits past the edge are all 0, so nothing is lost." :
+         res.roundedUp ? "The bits past the edge are more than half of the last kept bit, so we <b>round up</b>." :
+         "The bits past the edge are less than half of the last kept bit, so we <b>drop them</b>.") + "</div>" +
+       "<div class='say'>Stored: <b>" + binForm(res) + " = " + shortDec(pow2dec(res.M, res.e - (P - 1))).replace(/^/, res.s ? "−" : "") + "</b></div>"]
+    ];
+    var done = "";
+    for (var i = 0; i < st - 1; i++) done += "<div class='done-line'><span class='ck'>✓</span>" + T[i][0] + "</div>";
+    $("done").innerHTML = done;
+    $("now").innerHTML = "<div class='lbl'>Step " + st + " of 5: " + T[st - 1][0] + "</div>" + T[st - 1][1];
+    $("back").disabled = st === 1; $("next").disabled = st === 5;
+    $("replay").classList.toggle("hide", st !== 2);
+
+    // exact vs stored
+    var ex = (W.sameSign ? "" : "") + exactSum();
+    var stored = res ? (res.s ? "−" : "") + pow2dec(res.M, res.e - (P - 1)) : "0";
+    $("exact").innerHTML = "<div class='say'>Exact " + (W.sameSign ? "sum" : "difference") + " of the two " + P + "-bit numbers: <span class='mono'>" + ex + "</span></div>" +
+      "<div class='say'>Stored answer: <span class='mono'>" + stored + "</span></div>" +
+      (ex === stored ? "<div class='say' style='color:var(--b)'>Nothing was lost.</div>" : "<div class='say' style='color:var(--red)'>Some of the answer was lost. " + lostWhy() +
+       " (The hardware holds on to a few extra bits while it adds, but at the end only " + P + " bits are kept.)</div>");
+  }
+  function lostWhy() {
+    // where did the lost bits come from?
+    var small = W.small, big = W.big, slid = false;
+    bits(small.M, P).split("").forEach(function (b, j) { if (b === "1" && small.e - j < big.e - (P - 1)) slid = true; });
+    var why = [];
+    if (slid) why.push("When we lined up the exponents, bits of the smaller number slid past the edge of the kept bits.");
+    if (W.res && W.res.kS > big.e) why.push("The sum carried into a new place, so the kept bits moved one place left and the last bit no longer fit.");
+    return why.join(" ");
+  }
+  function exactSum() { return (W.S === 0n ? "" : W.big.s ? "−" : "") + pow2dec(W.S, W.u); }
+
+  /* ---------- controls ---------- */
+  $("next").onclick = function () { if (W && W.step < 5) { W.step++; W.animate = W.step === 2; drawAll(); } };
+  $("back").onclick = function () { if (W && W.step > 1) { W.step--; drawAll(); } };
+  $("replay").onclick = function () { if (W) { W.step = 2; W.animate = true; drawAll(); } };
+  ["ina", "inb"].forEach(function (id) { $(id).addEventListener("input", setup); });
+  $("prec").onchange = setup;
+  var PRESETS = [
+    ["Activity Q14: 1.111×2³ + 1.1×2⁻³", "15", "0.1875", "4"],
+    ["carry: 1.111 + 1.0", "1.875", "1", "4"],
+    ["fits: 1.5 + 0.75", "1.5", "0.75", "4"],
+    ["notes: 0.5 + 0.4375", "0.5", "0.4375", "24"],
+    ["0.1 + 0.2", "0.1", "0.2", "53"],
+    ["mystery: 3.14 + 10²⁰", "3.14", "1e20", "53"]
+  ];
+  PRESETS.forEach(function (p) {
+    var b = document.createElement("button"); b.className = "act"; b.textContent = p[0];
+    b.onclick = function () { $("ina").value = p[1]; $("inb").value = p[2]; $("prec").value = p[3]; setup(); };
+    $("presets").appendChild(b);
+  });
+  setup();
+})();
+</script>
+</body>
+</html>

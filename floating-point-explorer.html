@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Floating Point, Step by Step</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f4f3f7; --card: #ffffff; --ink: #1a1a1a; --muted: #5a5a66;
+    --line: #8a8a96; --faint: #d4d4dc; --hl: #ffd84d;
+    --sgn: #c0392b; --sgn-soft: #fbe3e0; --exp: #11804a; --exp-soft: #dcf3e6;
+    --frc: #1464d2; --frc-soft: #e1ecfb; --carry: #b35c00; --carry-soft: #fbe6cf;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+      --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d;
+      --sgn: #ff7b6b; --sgn-soft: #4a2420; --exp: #5fd39a; --exp-soft: #1b3d2b;
+      --frc: #85b6ff; --frc-soft: #1c2e4d; --carry: #ffb35c; --carry-soft: #4a3418;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15151a; --panel: #212129; --card: #1b1b22; --ink: #ececf1; --muted: #a9a9b6;
+    --line: #8c8c9a; --faint: #3b3b47; --hl: #ffd84d;
+    --sgn: #ff7b6b; --sgn-soft: #4a2420; --exp: #5fd39a; --exp-soft: #1b3d2b;
+    --frc: #85b6ff; --frc-soft: #1c2e4d; --carry: #ffb35c; --carry-soft: #4a3418;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 12px 16px 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 17px; line-height: 1.45; overflow-x: hidden;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 0 0 8px; }
+  .mono { font-family: var(--mono); }
+  .note { color: var(--muted); font-size: .92rem; }
+  .panel { background: var(--panel); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .tabs button { font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--faint);
+    background: var(--card); color: var(--ink); cursor: pointer; }
+  .tabs button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  input[type=text] { font: inherit; font-family: var(--mono); width: 8em; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  input.bad { border-color: var(--sgn); }
+  button.act { font: inherit; font-size: .92rem; padding: 4px 11px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); cursor: pointer; }
+  button.act:hover { border-color: var(--ink); }
+  button.main { font-weight: 700; background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button:disabled { opacity: .4; cursor: default; }
+  .hide { display: none !important; }
+
+  /* focus card */
+  .focus { background: var(--card); border: 2px solid var(--faint); border-radius: 12px; padding: 16px 18px; margin-bottom: 10px; }
+  .focus .lbl { font-size: .85rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .eq { font-family: var(--mono); font-size: 1.9rem; margin: 6px 0; }
+  .say { font-size: 1.08rem; margin: 4px 0; }
+  .alg { margin-top: 8px; padding: 8px 12px; border-left: 4px solid var(--frc); background: var(--card); border-radius: 6px;
+    font-size: 1.05rem; line-height: 2; }
+  .alg .m { font-family: var(--mono); }
+  .alg .dim { color: var(--muted); font-size: .92rem; }
+  .alg .unk { color: var(--muted); }
+  .alg table { border-collapse: collapse; }
+  .alg td { padding: 2px 8px 2px 0; white-space: nowrap; font-family: var(--mono); }
+  .alg td.w { font-family: inherit; color: var(--muted); font-size: .92rem; }
+  .alg .scroll { overflow-x: auto; }
+  .bitc { color: var(--frc); font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
+  .carry { background: var(--carry-soft); color: var(--ink); border-radius: 5px; padding: 0 3px; }
+  .bitsofar { font-family: var(--mono); font-size: 2.2rem; font-weight: 700; letter-spacing: .04em; }
+  .bitsofar .newbit { background: var(--hl); color: #1a1a1a; border-radius: 4px; padding: 0 2px; }
+
+  /* fold-away sections */
+  details { background: var(--panel); border-radius: 10px; margin-bottom: 10px; }
+  details > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; }
+  details > div { padding: 0 14px 12px; }
+  .steplist { font-family: var(--mono); font-size: 1.02rem; }
+  .steplist .carryline { font-family: inherit; color: var(--muted); font-size: .88rem; padding-left: 1.5em; margin: 1px 0 3px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { fill: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+
+  /* IEEE bits */
+  .fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+  .field { display: flex; flex-direction: column; align-items: center; gap: 3px; transition: opacity .2s; }
+  .field.dim { opacity: .28; }
+  .field .bits { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; }
+  .field .cap { font-size: .85rem; font-weight: 700; }
+  .bits button { font-family: var(--mono); font-size: 1rem; width: 1.7em; height: 2em; border-radius: 5px;
+    border: 1.5px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; padding: 0; }
+  .f-s button { border-color: var(--sgn); } .f-s button.one { background: var(--sgn-soft); font-weight: 700; }
+  .f-e button { border-color: var(--exp); } .f-e button.one { background: var(--exp-soft); font-weight: 700; }
+  .f-f button { border-color: var(--frc); } .f-f button.one { background: var(--frc-soft); font-weight: 700; }
+  .f-s .cap { color: var(--sgn); } .f-e .cap { color: var(--exp); } .f-f .cap { color: var(--frc); }
+  .fin { font-family: var(--mono); font-size: 1.3rem; letter-spacing: .18em; padding: 5px 4px 5px 8px; border-radius: 6px;
+    border: 2px solid var(--line); background: var(--card); color: var(--ink); }
+  .f-s .fin { border-color: var(--sgn); background: var(--sgn-soft); width: 2.2em; text-align: center; padding-left: 4px; }
+  .f-e .fin { border-color: var(--exp); background: var(--exp-soft); width: 9.4em; }
+  .f-f .fin { border-color: var(--frc); background: var(--frc-soft); width: 25.5em; max-width: 100%; }
+  .dbl .f-e .fin { width: 12.6em; }
+  .dbl .f-f .fin { font-size: 1rem; letter-spacing: .06em; width: 37em; }
+  .tabs.fmt button { font-size: .92rem; padding: 4px 11px; }
+  .fin.bad { border-color: var(--sgn); border-style: dashed; background: var(--card); }
+  .one-dot { font-family: var(--mono); font-size: 1.3rem; color: var(--muted); align-self: center; }
+  .done-line { margin: 3px 0; font-size: 1rem; }
+  .done-line .ck { color: var(--exp); font-weight: 700; margin-right: 6px; }
+  .c-s { color: var(--sgn); font-weight: 700; } .c-e { color: var(--exp); font-weight: 700; } .c-f { color: var(--frc); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Floating Point, Step by Step</h1>
+  <div class="tabs">
+    <button id="tab-conv" class="on">Decimal → binary</button>
+    <button id="tab-bits">Reading IEEE bits</button>
+  </div>
+
+  <!-- ================= DECIMAL TO BINARY ================= -->
+  <section id="view-conv">
+    <div class="panel row">
+      <label for="cdec"><b>Number:</b></label>
+      <input type="text" id="cdec" value="0.625">
+      <button class="act main" id="cnext">Next step</button>
+      <button class="act" id="creset">Start over</button>
+      <span class="note">Try:</span>
+      <span class="row" id="cpresets" style="gap:5px"></span>
+    </div>
+
+    <div class="panel" id="cwhole"></div>
+
+    <div class="focus" id="cfocus"></div>
+
+    <div class="focus" id="csofar"></div>
+
+    <details id="dsteps">
+      <summary>All the steps so far</summary>
+      <div class="steplist" id="csteps"></div>
+    </details>
+
+    <details id="druler">
+      <summary>Why does × 2 work? Zoom in on the ruler</summary>
+      <div>
+        <svg id="ruler" viewBox="0 0 1000 190" role="img" aria-label="A ruler from 0 to 1 that stretches to 0 to 2"></svg>
+        <div class="say" id="rcap"></div>
+        <div class="row" style="margin-top:6px"><button class="act" id="rreplay">↻ Replay this step</button>
+          <span class="note">Each Next step plays the stretch while this section is open.</span></div>
+      </div>
+    </details>
+
+    <details id="dalg">
+      <summary>The algebra: each × 2 brings the next bit to the front</summary>
+      <div class="alg">
+        <div class="say" style="margin:0 0 6px">The bits are there; we just don't know them yet. Call them b<sub>1</sub>, b<sub>2</sub>, b<sub>3</sub>, …, like unknowns. × 2 moves the binary point one place right, so the next unknown bit comes out in front of the point, where we can read it.</div>
+        <div id="algrows"></div>
+        <label class="note" style="display:inline-flex;gap:6px;align-items:center;margin-top:6px;cursor:pointer">
+          <input type="checkbox" id="algnest"><span>Also show it as 2<sup>−1</sup>( … ), like the last page of the notes</span></label>
+        <div id="algnested"></div>
+      </div>
+    </details>
+
+    <details id="dline">
+      <summary>Picture: the total so far on a number line</summary>
+      <div>
+        <svg id="cline" viewBox="0 0 1000 110" role="img" aria-label="Total so far on a number line from 0 to 1"></svg>
+        <div class="note">Orange triangle: the number we want. Yellow dot: the total so far. Blue box: where the number must be. Each step cuts the box in half.</div>
+      </div>
+    </details>
+
+    <details id="dnorm" class="hide">
+      <summary>Next: normalize it (for IEEE)</summary>
+      <div id="cnorm"></div>
+    </details>
+  </section>
+
+  <!-- ================= READING IEEE BITS ================= -->
+  <section id="view-bits" class="hide">
+    <div class="panel row">
+      <label for="dec"><b>Number:</b></label>
+      <input type="text" id="dec" value="-6.5">
+      <span class="note">Try:</span>
+      <span class="row" id="presets" style="gap:5px"></span>
+      <span class="tabs fmt" style="margin:0">
+        <button id="fmt-single" class="on">32 bits (float)</button>
+        <button id="fmt-double">64 bits (double)</button>
+      </span>
+    </div>
+
+    <div class="panel">
+      <div class="fields" id="fields">
+        <div class="field f-s" id="fs"><input class="fin" id="in-s" maxlength="1" spellcheck="false" autocomplete="off"><div class="cap">sign</div></div>
+        <div class="field f-e" id="fe"><input class="fin" id="in-e" maxlength="8" spellcheck="false" autocomplete="off"><div class="cap" id="cap-e">exponent (8 bits)</div></div>
+        <div class="field f-f" id="ff"><div style="display:flex; gap:4px; max-width:100%"><span class="one-dot" title="Not stored">1.</span><input class="fin" id="in-f" maxlength="23" spellcheck="false" autocomplete="off"></div><div class="cap" id="cap-f">fraction (23 bits)</div></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="note">You can type new bits into any box. For the fraction, 0s are added at the end.</span>
+        <button class="act hide" id="breset"></button>
+      </div>
+    </div>
+
+    <div class="focus">
+      <div id="bdone"></div>
+      <div id="bnow" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="act" id="bback">◀ Back</button>
+        <button class="act main" id="bnext">Next step ▶</button>
+      </div>
+    </div>
+
+    <details>
+      <summary>Is it stored exactly?</summary>
+      <div id="bexact"></div>
+    </details>
+  </section>
+</div>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, parent, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function bin(u, n) { var s = u.toString(2); while (s.length < n) s = "0" + s; return s; }
+  function minus(s) { return String(s).replace(/^-/, "−"); }
+  function sup(n) { return "<sup>" + minus(n) + "</sup>"; }
+  function presetButtons(box, list, go) {
+    list.forEach(function (p) {
+      var b = document.createElement("button"); b.className = "act"; b.textContent = p[0];
+      b.onclick = function () { go(p[1]); };
+      $(box).appendChild(b);
+    });
+  }
+
+  /* ---------- tabs ---------- */
+  function showTab(t) {
+    ["conv", "bits"].forEach(function (x) {
+      $("tab-" + x).classList.toggle("on", x === t);
+      $("view-" + x).classList.toggle("hide", x !== t);
+    });
+  }
+  $("tab-conv").onclick = function () { showTab("conv"); };
+  $("tab-bits").onclick = function () { showTab("bits"); };
+
+  /* ================= DECIMAL TO BINARY ================= */
+  // Exact arithmetic with BigInt: the part after the point is num/den, with den = 10^d.
+  var C = null, MAXSTEPS = 24;
+  function decStr(n, scale) {
+    var t = n.toString();
+    if (scale === 0) return t;
+    t = t.padStart(scale + 1, "0");
+    var ip = t.slice(0, t.length - scale), fp = t.slice(t.length - scale).replace(/0+$/, "");
+    return ip + (fp ? "." + fp : "");
+  }
+  function frac(r) { return "0." + (decStr(r, C.d).split(".")[1] || "0"); }       // r/den as 0.xxx
+  function afterPt(r) { return decStr(r, C.d).split(".")[1] || ""; }              // just the xxx
+  function convSetup() {
+    var m = $("cdec").value.trim().replace(/−/g, "-").match(/^([+-])?(\d*)(?:\.(\d*))?$/);
+    var ok = m && (m[2] || m[3]) && ((m[3] || "").length <= 30);
+    $("cdec").classList.toggle("bad", !ok);
+    if (!ok) return false;
+    var d = (m[3] || "").length, den = 10n ** BigInt(d), num = BigInt(m[3] || "0");
+    C = { neg: m[1] === "-", whole: BigInt(m[2] || "0"), d: d, den: den, num: num, steps: [], repeatFrom: 0, shown: 0 };
+    var seen = new Map(), r = num, stopAt = MAXSTEPS;
+    for (var k = 1; k <= stopAt && r !== 0n; k++) {
+      if (!C.repeatFrom && seen.has(r)) {
+        // same leftover as an earlier step: keep going a little so the repeat is visible
+        C.repeatFrom = seen.get(r); C.period = k - C.repeatFrom; C.repeatAt = k;
+        stopAt = Math.min(MAXSTEPS, Math.max(12, C.repeatFrom - 1 + 2 * C.period));
+        if (k > stopAt) break;
+      }
+      seen.set(r, k);
+      var r2 = r * 2n, bit = r2 >= den ? 1 : 0;
+      C.steps.push({ k: k, before: r, times: r2, bit: bit, after: bit ? r2 - den : r2 });
+      r = bit ? r2 - den : r2;
+    }
+    return true;
+  }
+  function bitsTo(n) { return C.steps.slice(0, n).map(function (s) { return s.bit; }).join(""); }
+  function timesStr(st) {
+    // e.g. 1.25 with the 1 underlined (the bit) and .25 highlighted (what we carry down)
+    var ti = st.times / C.den, tf = st.times % C.den;
+    return "<span class='bitc'>" + ti + "</span>" + (tf ? "<span class='carry'>." + afterPt(tf) + "</span>" : "");
+  }
+  function convDraw() {
+    var n = C.shown, sg = C.neg ? "−" : "", wb = C.whole.toString(2);
+    var fracPart = frac(C.num);
+
+    // before the point
+    $("cwhole").innerHTML = C.whole > 0n ?
+      "<b>Before the point:</b> " + C.whole + " = <span class='mono'>" + wb + "</span><sub>2</sub> (the usual way). " +
+      "<b>After the point:</b> <span class='mono'>" + fracPart + "</span>. That's the part we work on below." :
+      "We work on the part after the point: <span class='mono'>" + fracPart + "</span>." + (C.neg ? " <span class='note'>(The minus sign goes in the sign bit later.)</span>" : "");
+
+    // the one step we are on
+    var f = "";
+    if (C.num === 0n) f = "<div class='say'>There is nothing after the point. Done!</div>";
+    else if (n === 0) f = "<div class='lbl'>Start</div><div class='say'>Multiply <span class='mono carry'>" + fracPart +
+      "</span> by 2. The digit in front of the point will be the first bit.</div><div class='say note'>Press <b>Next step</b>.</div>";
+    else {
+      var st = C.steps[n - 1];
+      f = "<div class='lbl'>Step " + n + "</div>" +
+        "<div class='eq'><span class='carry'>" + frac(st.before) + "</span> × 2 = " + timesStr(st) + "</div>" +
+        "<div class='say'>The digit in front of the point is the next bit: <span class='bitc'>" + st.bit + "</span></div>";
+      if (st.after === 0n) f += "<div class='say'>Nothing is left after the point, so we stop. <b>Done!</b></div>";
+      else if (n === C.steps.length && C.repeatFrom) {
+        f += "<div class='say'>We would carry <span class='mono carry'>" + frac(st.after) + "</span> down next. But we already had <span class='mono carry'>" +
+          frac(st.after) + "</span> at step " + (C.steps.findIndex(function (x) { return x.before === st.after; }) + 1) + ". <b>The bits repeat forever.</b></div>";
+      } else if (n === C.steps.length) f += "<div class='say'>We stop here (" + MAXSTEPS + " bits).</div>";
+      else f += "<div class='say'>Carry <span class='mono carry'>" + frac(st.after) + "</span> down to the next step" + (st.bit ? " (drop the 1)" : "") + ".</div>";
+    }
+    $("cfocus").innerHTML = f;
+
+    // the bits so far, and what they add up to
+    var bits = bitsTo(n), done = n === C.steps.length;
+    var shown = bits ? bits.slice(0, -1) + "<span class='newbit'>" + bits.slice(-1) + "</span>" : "";
+    var g = "<div class='lbl'>" + (done ? "Answer" : "Bits so far") + "</div>" +
+      "<div class='bitsofar'>" + sg + wb + "." + (shown || "") + (done && C.repeatFrom ? "…" : "") + "<sub style='font-size:.5em'>2</sub></div>";
+    if (n) {
+      var used = [], vals = [], B = 0n;
+      for (var i = 0; i < n; i++) if (C.steps[i].bit) { used.push("2" + sup(-(i + 1))); vals.push(decStr(5n ** BigInt(i + 1), i + 1)); }
+      B = BigInt("0b" + bits);
+      var total = decStr(B * 5n ** BigInt(n), n);
+      g += "<div class='say' style='margin-top:6px'>After the point: " + (used.length ? used.join(" + ") + " = " + (vals.length > 1 && vals.length <= 3 ? vals.join(" + ") + " = " : "") + "<b>" + total + "</b>" : "<b>0</b> so far") +
+        " &nbsp;<span class='note'>(we want " + fracPart + ")</span></div>";
+    }
+    if (done && C.repeatFrom) {
+      var block = bits.slice(C.repeatFrom - 1, C.repeatFrom - 1 + C.period);
+      g += "<div class='say'>The block <span class='mono' style='text-decoration:overline'>" + block + "</span> repeats forever, so a computer <b>can't store " +
+        $("cdec").value.trim() + " exactly</b>.</div>";
+    }
+    $("csofar").innerHTML = g;
+
+    // fold-away: every step, with the carry shown between steps
+    var L = "";
+    for (var j = 0; j < n; j++) {
+      var s2 = C.steps[j];
+      L += "<div>" + (j + 1) + ". <span class='carry'>" + frac(s2.before) + "</span> × 2 = " + timesStr(s2) + " → bit <b>" + s2.bit + "</b></div>";
+      if (j < n - 1) L += "<div class='carryline'>↓ carry <span class='carry mono'>" + frac(s2.after) + "</span> down</div>";
+    }
+    $("csteps").innerHTML = L || "<span class='note'>No steps yet.</span>";
+
+    // fold-away: number line picture
+    var svg = $("cline"); svg.innerHTML = "";
+    var X0 = 30, X1 = 970, Y = 60, fv = Number(C.num) / Number(C.den);
+    function X(x) { return X0 + x * (X1 - X0); }
+    var lo = n ? Number(BigInt("0b" + bits)) / Math.pow(2, n) : 0, w = Math.pow(2, -n);
+    el("rect", { x: X(lo), y: Y - 20, width: Math.max(1.5, X(lo + w) - X(lo)), height: 28, fill: "var(--frc-soft)", stroke: "var(--frc)" }, svg);
+    el("line", { x1: X0, y1: Y, x2: X1, y2: Y, stroke: "var(--line)", "stroke-width": 1.5 }, svg);
+    [[0, "0"], [0.25, "¼"], [0.5, "½"], [0.75, "¾"], [1, "1"]].forEach(function (t) {
+      el("line", { x1: X(t[0]), y1: Y, x2: X(t[0]), y2: Y + 8, stroke: "var(--line)" }, svg);
+      el("text", { x: X(t[0]), y: Y + 26, "text-anchor": "middle", "font-size": 15 }, svg, t[1]);
+    });
+    el("polygon", { points: [X(fv), Y + 4, X(fv) - 7, Y + 16, X(fv) + 7, Y + 16].join(" "), fill: "var(--carry)" }, svg);
+    el("circle", { cx: X(lo), cy: Y - 28, r: 7, fill: "var(--hl)", stroke: "var(--ink)" }, svg);
+
+    // fold-away: the stretching ruler (final position of this step)
+    algTable();
+    if (!anim) rulerFrame(n, 2);
+
+    // fold-away: normalize, once we're done
+    $("dnorm").classList.toggle("hide", !done || (C.whole === 0n && !bits.includes("1")));
+    if (done) {
+      var digits = wb + bits, first = digits.indexOf("1");
+      if (first >= 0) {
+        var e = wb.length - 1 - first, rest = digits.slice(first + 1).replace(/0+$/, "");
+        $("cnorm").innerHTML = "<div class='say'>Move the point so there is exactly one 1 in front of it. Here that's " + Math.abs(e) + " place" +
+          (Math.abs(e) === 1 ? "" : "s") + (e >= 0 ? " to the left" : " to the right") + ":</div>" +
+          "<div class='eq' style='font-size:1.5rem'>" + sg + wb + "." + bits + (C.repeatFrom ? "…" : "") + " = " + sg + "1." + (rest || "0") + (C.repeatFrom ? "…" : "") + " × 2" + sup(e) + "</div>" +
+          "<div class='row'><button class='act' id='cgo'>See its IEEE bits →</button></div>";
+        $("cgo").onclick = function () { $("dec").value = $("cdec").value; fromDecimal(); showTab("bits"); };
+      }
+    }
+    $("cnext").disabled = done;
+  }
+  /* ---------- the stretching ruler ---------- */
+  // The ruler always shows a piece of the original 0-to-1 ruler. "× 2" stretches it to 0-to-2.
+  // Then we keep the half that has the dot: past 1 -> bit 1 (slide back by 1), below 1 -> bit 0.
+  // Keeping half the ruler each time is the same as zooming in on the original ruler.
+  var anim = null;
+  function rwin(k) {            // the piece of the original ruler we see after k steps: [lo, lo + w]
+    return { lo: k ? Number(BigInt("0b" + bitsTo(k))) / Math.pow(2, k) : 0, w: Math.pow(2, -k) };
+  }
+  function lab(v) { return String(+v.toPrecision(5)); }
+  function rulerFrame(k, t) {
+    // k = the step being shown (0 = start); t in [0, 2]: 0-1 stretch, 1-2 keep one half
+    var svg = $("ruler"); svg.innerHTML = "";
+    function X(v) { return 60 + v * 430; }
+    var Y = 112, H = 30;
+    el("rect", { x: X(1), y: 20, width: X(2) - X(1), height: 140, fill: "var(--hl)", opacity: .16 }, svg);
+    el("text", { x: X(1.5), y: 38, "text-anchor": "middle", "font-size": 15, "font-weight": 700 }, svg, "past 1 → bit is 1");
+    el("text", { x: X(0.5), y: 38, "text-anchor": "middle", "font-size": 15, "font-weight": 700, style: "fill:var(--muted)" }, svg, "below 1 → bit is 0");
+    el("line", { x1: X(0), y1: 160, x2: X(2), y2: 160, stroke: "var(--line)", "stroke-width": 1.5 }, svg);
+    [0, 1, 2].forEach(function (v) {
+      el("line", { x1: X(v), y1: 160, x2: X(v), y2: 168, stroke: "var(--line)" }, svg);
+      el("text", { x: X(v), y: 184, "text-anchor": "middle", "font-size": 15 }, svg, String(v));
+    });
+    el("line", { x1: X(1), y1: 20, x2: X(1), y2: 160, stroke: "var(--ink)", "stroke-dasharray": "5 4" }, svg);
+
+    var start = k === 0, st = start ? null : C.steps[k - 1];
+    var x0 = start ? Number(C.num) / Number(C.den) : Number(st.before) / Number(C.den);
+    var win = rwin(start ? 0 : k - 1), bit = start ? 0 : st.bit;
+    if (start) t = 0;
+    function ease(u) { return u < 0 ? 0 : u > 1 ? 1 : u * u * (3 - 2 * u); }
+    var scale = 1 + ease(Math.min(t, 1)), e2 = ease(t - 1);
+    var shift = bit ? -e2 : 0;                                  // slide back by 1 if the bit is 1
+    // two halves of the ruler: original [0, .5] and [.5, 1]
+    [[0, 0.5, bit ? 1 - e2 : 1], [0.5, 1, bit ? 1 : 1 - e2]].forEach(function (h) {
+      if (h[2] <= 0.01) return;
+      var a = h[0] * scale + shift, b = h[1] * scale + shift;
+      var g = el("g", { opacity: h[2] }, svg);
+      el("rect", { x: X(a), y: Y - H / 2, width: X(b) - X(a), height: H, fill: "var(--frc-soft)", stroke: "var(--frc)", "stroke-width": 1.5 }, g);
+      for (var q = 0; q <= 4; q++) {
+        var f = h[0] + (h[1] - h[0]) * q / 4, xx = X(f * scale + shift);
+        el("line", { x1: xx, y1: Y - H / 2, x2: xx, y2: Y - H / 2 + (q % 2 ? 8 : 14), stroke: "var(--frc)" }, g);
+      }
+      // where these spots are on the original 0-to-1 ruler
+      (h[0] === 0 ? [0, 0.5] : [0.5, 1]).forEach(function (r) {
+        el("text", { x: X(r * scale + shift), y: Y + H / 2 + 17, "text-anchor": "middle", "font-size": 13, "font-weight": 700, style: "fill:var(--frc)" }, g,
+          lab(win.lo + r * win.w));
+      });
+    });
+    if (!start) el("text", { x: X(0.5), y: 184, "text-anchor": "middle", "font-size": 13, style: "fill:var(--muted)" }, svg, "number line: value after × 2");
+    var z = start ? 0 : t >= 1.999 ? k : k - 1;
+    el("text", { x: 6, y: 38, "text-anchor": "start", "font-size": 14, "font-weight": 700, style: "fill:var(--muted)" }, svg,
+      z ? "zoomed in " + Math.pow(2, z) + "×" : "whole ruler");
+    var xp = x0 * scale + shift;
+    el("circle", { cx: X(xp), cy: Y - H / 2 - 12, r: 8, fill: "var(--carry)", stroke: "var(--ink)" }, svg);
+    el("line", { x1: X(xp), y1: Y - H / 2 - 4, x2: X(xp), y2: Y + H / 2, stroke: "var(--carry)", "stroke-width": 2.5 }, svg);
+    el("text", { x: Math.min(Math.max(X(xp), 40), 960), y: Y - H / 2 - 26, "text-anchor": "middle", "font-size": 15, "font-weight": 700 }, svg, lab(xp));
+
+    // caption
+    var c;
+    if (start) c = "The blue ruler is the original ruler from 0 to 1. The orange dot is <b>" + frac(C.num) + "</b>. Press <b>Next step</b>." +
+      "<div class='note' style='margin-top:4px'>The blue numbers on the ruler always say where that spot is on the <b>original</b> ruler. They move with the ruler as it stretches.</div>";
+    else {
+      var after = rwin(k), dx = frac(st.before);
+      c = "<b>Step " + k + ".</b> Stretch the ruler × 2: " + dx + " → " + lab(2 * x0) + ". ";
+      if (t >= 1.999) c += bit ? "It's <b>past 1, so the bit is 1</b>. Keep the right half and slide it back by 1: " + lab(2 * x0 - 1) + "." :
+        "It's <b>below 1, so the bit is 0</b>. Keep the left half: " + lab(2 * x0) + ".";
+      if (t >= 1.999) c += "<div class='note' style='margin-top:4px'>The ruler now shows " + lab(after.lo) + " to " + lab(after.lo + after.w) +
+        " of the original ruler (" + (k === 1 ? "half" : "1/" + Math.pow(2, k)) + " of it). Each step zooms in on the half with the dot.</div>";
+    }
+    $("rcap").innerHTML = c;
+  }
+
+  // The algebra: one line per step, using the bits found so far ("…" = bits we haven't found yet).
+  function nested(k, left) {            // x = 2^-1(b1 + 2^-1(b2 + ... 2^-1(bk + leftover)))
+    var h = "2<sup>−1</sup>", o = "";
+    for (var i = 0; i < k; i++) o += h + "(<span class='bitc'>" + C.steps[i].bit + "</span> + ";
+    return o + "<span class='carry'>" + left + "</span>" + ")".repeat(k);
+  }
+  function algTable() {
+    var n = C.shown, done = n === C.steps.length, all = bitsTo(n), more = !(done && !C.repeatFrom);
+    var tail = more ? "…" : "";
+    function b2(intPart, frac) {        // e.g. "1.01₂", "0.…₂", "1₂"
+      var f = frac + tail;
+      return intPart + (f ? "." + f : "") + "<sub>2</sub>";
+    }
+    if (!n) { $("algrows").innerHTML = "<div class='note'>Press <b>Next step</b> to add a line.</div>"; $("algnested").innerHTML = ""; return; }
+    var o = "<div class='scroll'><table>";
+    function bs(i) { return "b<sub>" + i + "</sub>"; }
+    function unk(from) { return "0." + bs(from) + bs(from + 1) + bs(from + 2) + "…<sub>2</sub>"; }
+    for (var k = 1; k <= n; k++) {
+      var st = C.steps[k - 1], x = frac(st.before), y = frac(st.after);
+      var tv = timesStr(st).replace(/<[^>]+>/g, "");
+      o += "<tr><td><span class='carry'>" + x + "</span> = " + unk(k) + "</td>" +
+        "<td class='w'>× 2 →</td>" +
+        "<td>" + tv + " = <span class='bitc'>" + bs(k) + "</span>." + bs(k + 1) + bs(k + 2) + "…<sub>2</sub></td>" +
+        "<td class='w'>so</td>" +
+        "<td><b><span class='bitc'>" + bs(k) + "</span> = <span class='bitc'>" + st.bit + "</span></b>,</td>" +
+        "<td>" + (st.after === 0n ? "and " + unk(k + 1) + " = 0. &nbsp;<span style='font-family:system-ui,sans-serif;color:var(--muted);font-size:.92rem'>The rest are 0. Done.</span>"
+          : "and <span class='carry'>" + y + "</span> = " + unk(k + 1)) + "</td></tr>";
+    }
+    $("algrows").innerHTML = o + "</table></div>";
+    var last = C.steps[n - 1], left = last.after === 0n ? "0" : frac(last.after);
+    $("algnested").innerHTML = !$("algnest").checked ? "" :
+      "<div style='margin-top:6px'><b>So far:</b> <span class='m'>" + frac(C.num) + " = " +
+      (n <= 5 ? nested(n, left) : "0." + all + "<sub>2</sub> + 2<sup>−" + n + "</sup> × <span class='carry'>" + left + "</span>") + "</span></div>" +
+      (n <= 5 ? "<div class='dim'>Each 2<sup>−1</sup>( … ) is one step: the bit in front, plus what's left over, shrunk by half.</div>" : "");
+  }
+  $("algnest").onchange = function () { if (C) algTable(); };
+
+  function animate(k) {
+    if (anim) cancelAnimationFrame(anim);
+    var t0 = null, DUR = 2600;                 // stretch, pause, keep a half
+    function tick(now) {
+      if (t0 === null) t0 = now;
+      var u = (now - t0) / DUR, t = u < 0.4 ? u / 0.4 : u < 0.55 ? 1 : 1 + (u - 0.55) / 0.45;
+      rulerFrame(k, Math.min(t, 2));
+      if (u < 1) anim = requestAnimationFrame(tick); else anim = null;
+    }
+    anim = requestAnimationFrame(tick);
+  }
+  $("rreplay").onclick = function () { if (C && C.shown) animate(C.shown); };
+
+  function convStart() { if (anim) cancelAnimationFrame(anim); if (convSetup()) convDraw(); }
+  $("cnext").onclick = function () {
+    if (C && C.shown < C.steps.length) { C.shown++; convDraw(); if ($("druler").open) animate(C.shown); }
+  };
+  $("creset").onclick = convStart;
+  $("cdec").addEventListener("input", convStart);
+  $("cdec").addEventListener("keydown", function (e) { if (e.key === "Enter") $("cnext").click(); });
+  presetButtons("cpresets", [["0.75", "0.75"], ["0.625", "0.625"], ["5.25", "5.25"], ["0.1", "0.1"]],
+    function (v) { $("cdec").value = v; convStart(); });
+
+  /* ================= READING IEEE BITS ================= */
+  // bits are kept as a BigInt so the same code works for 32 and 64 bits
+  var FMTS = { single: { W: 32, E: 8, F: 23, bias: 127 }, double: { W: 64, E: 11, F: 52, bias: 1023 } };
+  var FMT = FMTS.single, FE, FF, BIAS;
+  function setFmtVars() { FE = FMT.E; FF = FMT.F; BIAS = FMT.bias; }
+  setFmtVars();
+  var f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+  var f64 = new Float64Array(1), u64 = new BigUint64Array(f64.buffer);
+  var B = { bits: 0n, typed: null, step: 1 };
+  function ones(n) { return (1n << BigInt(n)) - 1n; }
+  function parts(u) {
+    return { s: Number(u >> BigInt(FE + FF)), e: Number((u >> BigInt(FF)) & ones(FE)), m: u & ones(FF) };
+  }
+  function decode(u) {
+    if (FMT.W === 64) { u64[0] = u; return f64[0]; }
+    u32[0] = Number(u); return f32[0];
+  }
+  function short(v) {
+    if (!isFinite(v)) return isNaN(v) ? "NaN" : (v > 0 ? "∞" : "−∞");
+    if (v === 0) return Object.is(v, -0) ? "−0" : "0";
+    var a = Math.abs(v), s;
+    if (a >= 1e7 || a < 1e-4) { var m = a.toExponential(6).replace(/\.?0+e/, "e").split("e"); s = m[0] + " × 10" + sup(+m[1]); }
+    else s = String(+a.toPrecision(10));
+    return (v < 0 ? "−" : "") + s;
+  }
+  function exact(u) {
+    // the exact decimal value of the stored bits: M x 2^k, done with BigInt so nothing is rounded
+    var p = parts(u), v = decode(u);
+    if (!isFinite(v) || v === 0) return short(v);
+    var M = p.e ? p.m + (1n << BigInt(FF)) : p.m, k = Math.max(p.e, 1) - BIAS - FF;
+    while (k < 0 && M % 2n === 0n) { M /= 2n; k++; }
+    var s = k >= 0 ? (M << BigInt(k)).toString() : decStr(M * 5n ** BigInt(-k), -k);
+    return (p.s ? "−" : "") + s;
+  }
+  function shiftPoint(fr, e) {
+    // 1.fr x 2^e written without the power of 2; null if it would be too long
+    var digits = "1" + fr, point = 1 + e;
+    if (point > 30 || point < -12) return null;
+    if (point <= 0) { digits = "0".repeat(1 - point) + digits; point = 1; }
+    while (digits.length < point) digits += "0";
+    var ip = digits.slice(0, point).replace(/^0+(?=.)/, ""), fp = digits.slice(point).replace(/0+$/, "");
+    return ip + (fp ? "." + fp : "");
+  }
+
+  var FIELDS;   // [name, lowest bit, number of bits]
+  function setFields() {
+    FIELDS = [["s", FE + FF, 1], ["e", FF, FE], ["f", 0, FF]];
+    $("in-e").maxLength = FE; $("in-f").maxLength = FF;
+    $("cap-e").textContent = "exponent (" + FE + " bits)";
+    $("cap-f").textContent = "fraction (" + FF + " bits)";
+    $("fields").classList.toggle("dbl", FMT.W === 64);
+  }
+  setFields();
+  function drawFields() {
+    var u = B.bits;
+    FIELDS.forEach(function (fd, i) {
+      var inp = $("in-" + fd[0]);
+      if (document.activeElement !== inp) {
+        inp.value = bin((u >> BigInt(fd[1])) & ones(fd[2]), fd[2]);
+        inp.classList.remove("bad");
+      }
+      $("f" + fd[0]).classList.toggle("dim", !(B.step === i + 1 || B.step === 4));
+    });
+    var r = $("breset");
+    r.classList.toggle("hide", B.typed === null || encode(B.typed) === B.bits);
+    if (B.typed !== null) r.textContent = "↺ Reset to " + short(B.typed).replace(/<[^>]+>/g, "");
+  }
+  ["s", "e", "f"].forEach(function (name, i) {
+    var inp = $("in-" + name);
+    inp.addEventListener("focus", function () { inp.select(); });
+    inp.addEventListener("blur", function () { drawFields(); });
+    inp.addEventListener("input", function () {
+      var fd = FIELDS[i];
+      var t = inp.value.trim(), ok = name === "f" ? /^[01]*$/.test(t) : new RegExp("^[01]{" + fd[2] + "}$").test(t);
+      inp.classList.toggle("bad", !ok);
+      if (!ok) return;
+      if (name === "f") t = (t + "0".repeat(FF)).slice(0, FF);     // fraction: fill in 0s at the end
+      var mask = ones(fd[2]) << BigInt(fd[1]);
+      B.bits = (B.bits & ~mask & ones(FMT.W)) | (BigInt("0b" + t) << BigInt(fd[1]));
+      drawBits();
+    });
+  });
+  function encode(x) {
+    if (FMT.W === 64) { f64[0] = x; return u64[0]; }
+    f32[0] = x; return BigInt(u32[0]);
+  }
+  function setFmt(name) {
+    FMT = FMTS[name]; setFmtVars(); setFields();
+    $("fmt-single").classList.toggle("on", name === "single");
+    $("fmt-double").classList.toggle("on", name === "double");
+    if (B.typed !== null) B.bits = encode(B.typed);
+    drawBits();
+  }
+  $("fmt-single").onclick = function () { setFmt("single"); };
+  $("fmt-double").onclick = function () { setFmt("double"); };
+  $("breset").onclick = function () { B.bits = encode(B.typed); drawBits(); };
+
+  function drawBits() {
+    var u = B.bits, p = parts(u), v = decode(u), special = p.e === 0 || p.e === 255;
+    var fr = bin(p.m, FF).replace(/0+$/, ""), e = p.e - BIAS, sg = p.s ? "−" : "";
+    drawFields();
+    // [summary once done, full explanation while we're on it]
+    var S = [
+      ["<span class='c-s'>Sign</span> " + p.s + " → " + (p.s ? "negative" : "positive"),
+       "<div class='eq'><span class='c-s'>" + p.s + "</span></div><div class='say'>The first bit is the <span class='c-s'>sign</span>. " +
+       (p.s ? "1 means <b>negative</b>." : "0 means <b>positive</b>.") + "</div>"],
+      special ?
+      ["<span class='c-e'>Exponent</span> all " + (p.e ? "1s" : "0s") + " → special",
+       "<div class='eq'><span class='c-e'>" + bin(p.e, FE) + "</span></div><div class='say'>The exponent is all " + (p.e ? "1s" : "0s") +
+       ". That's saved for <b>special values</b>" + (p.e ? " (∞ and NaN)" : " (0 and very tiny numbers)") + ". We'll see these later.</div>"] :
+      ["<span class='c-e'>Exponent</span> " + p.e + " − " + BIAS + " = " + minus(e),
+       "<div class='eq'><span class='c-e'>" + bin(p.e, FE) + "</span> = " + p.e + "</div><div class='say'>The next " + FE + " bits are the <span class='c-e'>exponent</span>, read as unsigned. " +
+       "Subtract the bias " + BIAS + ":</div><div class='eq'>" + p.e + " − " + BIAS + " = <b>" + minus(e) + "</b></div>"],
+      special ?
+      ["<span class='c-f'>Fraction</span> " + (p.m ? "not all 0s" : "all 0s"),
+       "<div class='say'>The <span class='c-f'>fraction</span> is " + (p.m ? "not all 0s" : "all 0s") + ".</div>"] :
+      ["<span class='c-f'>Significand</span> 1." + (fr || "0") + "₂",
+       "<div class='say'>The last " + FF + " bits are the <span class='c-f'>fraction</span>. Put them after <b>1.</b> (the 1 is not stored)" +
+       (fr.length < FF ? ", and drop the 0s at the end" : "") + ":</div><div class='eq'><b>1.</b><span class='c-f'>" + (fr || "0") + "</span><sub style='font-size:.5em'>2</sub></div>"],
+      ["Value " + short(v),
+       special ?
+       "<div class='eq'>" + short(v) + "</div>" :
+       "<div class='say'>Put it together:</div><div class='eq' style='font-size:1.6rem'>" + sg + "1." + (fr || "0") + "<sub style='font-size:.5em'>2</sub> × 2" + sup(e) +
+       (shiftPoint(fr, e) !== null && e !== 0 ? " = " + sg + shiftPoint(fr, e) + "<sub style='font-size:.5em'>2</sub>" : "") + "</div>" +
+       "<div class='eq'>= <b>" + short(v) + "</b></div>"]
+    ];
+    var d = "";
+    for (var i = 0; i < B.step - 1; i++) d += "<div class='done-line'><span class='ck'>✓</span>" + S[i][0] + "</div>";
+    $("bdone").innerHTML = d;
+    $("bnow").innerHTML = "<div class='lbl' style='font-size:.85rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em'>Step " + B.step + " of 4</div>" + S[B.step - 1][1];
+    $("bback").disabled = B.step === 1;
+    $("bnext").disabled = B.step === 4;
+
+    // fold-away: exactness
+    var x = "<div class='say'>Stored value, exactly: <span class='mono' style='word-break:break-all'>" + exact(B.bits) + "</span></div>";
+    if (B.typed !== null && encode(B.typed) === B.bits && isFinite(B.typed) && isFinite(v)) x += B.typed === v ? "<div class='say'>That's exactly " + short(B.typed) + ". Nothing was lost.</div>" :
+      "<div class='say'>You typed " + short(B.typed) + ". It can't be stored exactly, so it was rounded. It's off by " + short(Math.abs(v - B.typed)) + ".</div>";
+    $("bexact").innerHTML = x;
+  }
+  function fromDecimal() {
+    var s = $("dec").value.trim().replace(/−/g, "-").replace(/\s/g, "");
+    var ok = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s);
+    $("dec").classList.toggle("bad", !ok && s !== "");
+    if (!ok) return;
+    var x = parseFloat(s);
+    B.bits = encode(x); B.typed = x; B.step = 1;
+    drawBits();
+  }
+  $("dec").addEventListener("input", fromDecimal);
+  $("bnext").onclick = function () { if (B.step < 4) { B.step++; drawBits(); } };
+  $("bback").onclick = function () { if (B.step > 1) { B.step--; drawBits(); } };
+  presetButtons("presets", [["−6.5", "-6.5"], ["−5", "-5"], ["0.75", "0.75"], ["0.1", "0.1"]],
+    function (v) { $("dec").value = v; fromDecimal(); });
+
+  convStart(); fromDecimal();
+})();
+</script>
+</body>
+</html>
