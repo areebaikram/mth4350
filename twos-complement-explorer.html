@@ -345,10 +345,13 @@
         (tc(b, n) === -1 ? " step" : " steps") + " <b>back</b>, i.e. subtracting " + (-tc(b, n)) + ", since " + b + " = " + N + " − " + (-tc(b, n)) + ". Going all the way around once (" + N + " steps) changes nothing.</div>";
       if (W.read !== "u") {
         var cin = cs[n - 1] === 1, yn = function (x) { return x ? "<b>yes</b>" : "no"; };
-        html += "<div style='margin-top:6px'><b>Overflow check with carries:</b> carry <i>into</i> the leftmost bit? " + yn(cin) +
-          ". &nbsp;Carry <i>out</i> of it? " + yn(carry) + ". &nbsp;" +
-          (cin === carry ? (cin ? "Both: the two carries cancel, so <b>no overflow</b>." : "Neither: <b>no overflow</b>.")
-            : "Only one: nothing cancels it, so <b>overflow</b>.") + "</div>";
+        var sA = tc(a, n) < 0, sB = tc(b, n) < 0, sR = tc(r, n) < 0, word = function (neg) { return neg ? "negative" : "positive"; };
+        html += "<div style='margin-top:6px'><b>Overflow check with signs:</b> " +
+          (sA !== sB ? "A and B have different signs, so the answer is between them: <b>no overflow</b> possible." :
+           sR === sA ? "A and B are both " + word(sA) + ", and the result is " + word(sR) + " too: <b>no overflow</b>." :
+           "A and B are both " + word(sA) + ", but the result came out " + word(sR) + ": <b>overflow</b>.") + "</div>";
+        html += "<div class='note'>Hardware shortcut: compare the carry <i>into</i> the leftmost bit (" + (cin ? 1 : 0) + ") with the carry <i>out</i> of it (" + (carry ? 1 : 0) + "). " +
+          (cin === carry ? "Same" : "Different") + " → " + (cin === carry ? "no overflow" : "overflow") + ". It always agrees with the sign check.</div>";
         html += "<div><b>Overflow check on the wheel:</b> the real path (" + (tc(b, n) < 0 ? "dashed, " + (-tc(b, n)) + " back" : "orange, " + b + " forward") +
           ") " + (realCrossesRed(a, b, n) ? "<b>crosses</b> the red line, so <b>overflow</b>." : "does not cross the red line, so <b>no overflow</b>.") + "</div>";
         html += "<div class='note'>Range for " + n + " bits: " + fmt(lo) + " to " + hi + ".</div>";
